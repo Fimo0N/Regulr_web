@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- Google shows profile logos cropped to a circle, so everything sits well inside the centre. -->
+  <rect width="1024" height="1024" fill="#0f172a"/>
+  <text x="470" y="640" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-weight="800" font-size="500" fill="#ffffff">R</text>
+  <circle cx="680" cy="606" r="44" fill="#22c55e"/>
+  <text x="512" y="772" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-weight="700" font-size="64" letter-spacing="18" fill="#94a3b8">REGULR</text>
+</svg>

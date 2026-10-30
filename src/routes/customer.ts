@@ -1,0 +1,178 @@
+import { Router } from 'express';
+import type { Membership } from '@prisma/client';
+import { z } from 'zod';
+import { config } from '../config.js';
+import { prisma } from '../db.js';
+import { HttpError } from '../errors.js';
+import { clearSession, currentUser, getUser, requireUser } from '../auth.js';
+import { claimTap, joinStore, redeem } from '../loyalty.js';
+import { publicStore } from '../stores.js';
+import { googleWallet, removeCards } from '../wallet/index.js';
+
+export const customerRouter = Router();
+
+const rewardSelect = { id: true, name: true, description: true, cost: true, icon: true } as const;
+
+async function storeBySlug(slug: string) {
+  const store = await prisma.store.findUnique({ where: { slug } });
+  if (!store) throw new HttpError(404, 'store_not_found');
+  return store;
+}
+
+function publicConfig() {
+  return { googleClientId: config.googleClientId, devLogin: config.devLogin, googleWallet: Boolean(googleWallet) };
+}
+
+function publicMembership(m: Membership) {
+  return { balance: m.balance, inWallet: Boolean(m.googleObjectId) };
+}
+
+customerRouter.get('/config', (_req, res) => {
+  res.json(publicConfig());
+});
+
+// Stores for the discover map: only those whose owner has placed them on the map.
+customerRouter.get('/stores', async (req, res) => {
+  const [stores, user] = await Promise.all([
+    prisma.store.findMany({
+      where: { latitude: { not: null }, longitude: { not: null } },
+      include: { rewards: { where: { active: true }, orderBy: { cost: 'asc' }, select: rewardSelect } },
+      orderBy: { name: 'asc' },
+    }),
+    getUser(req),
+  ]);
+  const balances = new Map<string, number>();
+  if (user) {
+    const memberships = await prisma.membership.findMany({ where: { userId: user.id }, select: { storeId: true, balance: true } });
+    for (const m of memberships) balances.set(m.storeId, m.balance);
+  }
+  res.json({
+    stores: stores.map((s) => ({ ...publicStore(s, s.rewards), member: balances.has(s.id), balance: balances.get(s.id) ?? null })),
+  });
+});
+
+// Everything the card page needs in one round trip: store, who's signed in, their card,
+// and (after an NFC tap) the stamp result. Taps happen at a busy counter, so speed matters.
+customerRouter.post('/stores/:slug/open', async (req, res) => {
+  const { tapId } = z.object({ tapId: z.string().optional() }).parse(req.body ?? {});
+  const store = await storeBySlug(String(req.params.slug));
+  const [rewards, user] = await Promise.all([
+    prisma.reward.findMany({ where: { storeId: store.id, active: true }, orderBy: { cost: 'asc' }, select: rewardSelect }),
+    getUser(req),
+  ]);
+  const base = { config: publicConfig(), store: publicStore(store, rewards) };
+  if (!user) {
+    res.json({ ...base, user: null });
+    return;
+  }
+
+  let { membership, joined } = await joinStore(user.id, store.id);
+  let tap = null;
+  if (tapId) {
+    try {
+      const result = await claimTap(user.id, tapId);
+      membership = result.membership;
+      tap = { stamped: result.stamped, reason: result.reason, nextStampAt: result.nextStampAt, expiresAt: result.tapExpiresAt };
+    } catch (err) {
+      if (!(err instanceof HttpError)) throw err;
+      tap = { error: err.code };
+    }
+  }
+  res.json({
+    ...base,
+    user: { name: user.name, email: user.email },
+    joined,
+    tap,
+    membership: publicMembership(membership),
+  });
+});
+
+customerRouter.get('/stores/:slug/history', requireUser, async (req, res) => {
+  const store = await storeBySlug(String(req.params.slug));
+  const membership = await prisma.membership.findUnique({
+    where: { userId_storeId: { userId: currentUser(res).id, storeId: store.id } },
+  });
+  if (!membership) {
+    res.json({ events: [] });
+    return;
+  }
+  const events = await prisma.stampEvent.findMany({
+    where: { membershipId: membership.id },
+    orderBy: { createdAt: 'desc' },
+    take: 50,
+    select: { id: true, kind: true, delta: true, rewardName: true, createdAt: true },
+  });
+  res.json({ events });
+});
+
+customerRouter.post('/stores/:slug/redeem', requireUser, async (req, res) => {
+  const store = await storeBySlug(String(req.params.slug));
+  const body = z.object({ rewardId: z.string(), tapId: z.string() }).parse(req.body);
+  const result = await redeem(currentUser(res).id, store.id, body.rewardId, body.tapId);
+  res.json({
+    membership: publicMembership(result.membership),
+    reward: { name: result.reward.name, cost: result.reward.cost },
+    redeemedAt: result.redeemedAt,
+  });
+});
+
+customerRouter.get('/stores/:slug/wallet/google', requireUser, async (req, res) => {
+  if (!googleWallet) throw new HttpError(404, 'google_wallet_not_configured');
+  const store = await storeBySlug(String(req.params.slug));
+  const user = currentUser(res);
+  const { membership } = await joinStore(user.id, store.id);
+  res.json({ url: await googleWallet.getSaveUrl(store, membership, user) });
+});
+
+// Pushes the current balance to the customer's Wallet card and reports whether the card
+// is actually saved, so the page can say "Wallet updated" or offer to add it.
+customerRouter.post('/stores/:slug/wallet/sync', requireUser, async (req, res) => {
+  const store = await storeBySlug(String(req.params.slug));
+  const membership = await prisma.membership.findUnique({
+    where: { userId_storeId: { userId: currentUser(res).id, storeId: store.id } },
+  });
+  if (!googleWallet || !membership?.googleObjectId) {
+    res.json({ updated: false, saved: false });
+    return;
+  }
+  try {
+    const saved = await googleWallet.updateBalance(store, membership);
+    res.json({ updated: saved, saved });
+  } catch (err) {
+    console.error('[google-wallet] sync failed', err);
+    res.json({ updated: false, saved: false });
+  }
+});
+
+// --- The signed-in customer's own data ---
+
+customerRouter.get('/me/cards', requireUser, async (_req, res) => {
+  const memberships = await prisma.membership.findMany({
+    where: { userId: currentUser(res).id },
+    include: { store: { include: { rewards: { where: { active: true }, orderBy: { cost: 'asc' }, select: rewardSelect } } } },
+    orderBy: [{ lastStampAt: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }],
+  });
+  res.json({
+    cards: memberships.map((m) => ({
+      balance: m.balance,
+      lifetimeStamps: m.lifetimeStamps,
+      lastStampAt: m.lastStampAt,
+      store: publicStore(m.store, m.store.rewards),
+    })),
+  });
+});
+
+// Right to erasure: removes the customer's cards, stamp history and account.
+customerRouter.delete('/me', requireUser, async (_req, res) => {
+  const user = currentUser(res);
+  if (await prisma.store.count({ where: { ownerId: user.id } })) throw new HttpError(409, 'owns_stores');
+  const memberships = await prisma.membership.findMany({ where: { userId: user.id } });
+  await removeCards(memberships);
+  await prisma.$transaction([
+    prisma.tapSession.updateMany({ where: { userId: user.id }, data: { userId: null } }),
+    prisma.membership.deleteMany({ where: { userId: user.id } }),
+    prisma.user.delete({ where: { id: user.id } }),
+  ]);
+  clearSession(res);
+  res.json({ ok: true });
+});
