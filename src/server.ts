@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { app } from './app.js';
 import { config } from './config.js';
+import { useBlob } from './uploads.js';
 
 // Runs Regulr as one long-lived server: `npm run dev` locally, or `npm start` on any
 // Node host. (Vercel doesn't use this file; it runs src/app.ts through api/index.js.)
@@ -34,5 +35,5 @@ httpServer.listen(config.port, () => {
   console.log(`Regulr running on ${config.publicUrl} (port ${config.port})`);
   console.log(`  Google Sign-In: ${config.googleClientId ? 'on' : 'off'} | Dev login: ${config.devLogin ? 'on' : 'off'}`);
   console.log(`  Google Wallet: ${config.googleWallet ? 'on' : 'off (web card only)'} | NTAG 424 keys: ${config.sun.metaKey ? 'on' : 'off'}`);
-  console.log(`  Uploads: ${process.env.BLOB_READ_WRITE_TOKEN ? 'Vercel Blob' : 'local uploads/ folder'}`);
+  console.log(`  Uploads: ${useBlob ? 'Vercel Blob' : 'local uploads/ folder'}`);
 });

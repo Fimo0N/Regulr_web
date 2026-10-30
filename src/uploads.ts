@@ -4,11 +4,12 @@ import { put } from '@vercel/blob';
 import { HttpError } from './errors.js';
 
 // Uploaded images (logos, cover photos).
-// - On Vercel: Vercel Blob (set BLOB_READ_WRITE_TOKEN by connecting a Blob store). The
-//   server's own disk is wiped between requests there, so files can't live on it.
-// - Locally without a token: the uploads/ folder, served at /uploads.
+// - On Vercel: Vercel Blob. Connecting a Blob store sets BLOB_STORE_ID (newer stores sign in
+//   with Vercel's per-request OIDC token) or BLOB_READ_WRITE_TOKEN (older stores). The
+//   server's own disk is read-only there, so files can't live on it.
+// - Locally without either: the uploads/ folder, served at /uploads.
 export const UPLOADS_DIR = path.join(process.cwd(), 'uploads');
-const useBlob = Boolean(process.env.BLOB_READ_WRITE_TOKEN);
+export const useBlob = Boolean(process.env.BLOB_READ_WRITE_TOKEN || process.env.BLOB_STORE_ID);
 
 /** Stores an image and returns the URL to save on the store: https://… (Blob) or /uploads/… (disk). */
 export async function saveUpload(folder: 'logos' | 'covers', name: string, body: Buffer, contentType: string) {

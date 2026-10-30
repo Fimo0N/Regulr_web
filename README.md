@@ -10,7 +10,7 @@ The app runs on Vercel as a static React app plus one serverless function (`api/
 
 1. **Import the repo:** Vercel → Add New → Project → pick this GitHub repo. Leave the build settings alone (`vercel.json` sets them). Don't deploy yet if it offers; if it does, the first build fails until step 2 is done.
 2. **Database:** Project → Storage → Create Database → **Neon** → connect it to the project. This sets `DATABASE_URL` and `DATABASE_URL_UNPOOLED`.
-3. **Uploads:** Project → Storage → Create → **Blob** → connect it. This sets `BLOB_READ_WRITE_TOKEN`.
+3. **Uploads:** Project → Storage → Create → **Blob** → connect it. This sets `BLOB_STORE_ID` (or `BLOB_READ_WRITE_TOKEN` on older stores). Choose **Public** access.
 4. **Environment variables** (Project → Settings → Environment Variables):
 
    | Name | Value |
@@ -37,7 +37,7 @@ npx prisma migrate deploy # creates the tables
 npm run dev               # http://localhost:3000
 ```
 
-For a local database, create a **`dev` branch** of the Neon database (Neon console → Branches) and use its connection strings, so testing never touches real customers. Without `BLOB_READ_WRITE_TOKEN`, uploads are saved to `uploads/`. `DEV_LOGIN=true` lets you sign in with just an email.
+For a local database, create a **`dev` branch** of the Neon database (Neon console → Branches) and use its connection strings, so testing never touches real customers. Without a Blob store, uploads are saved to `uploads/`. `DEV_LOGIN=true` lets you sign in with just an email.
 
 1. Open `http://localhost:3000/portal`, sign in, create a store, add rewards.
 2. Under **Store profile**, set the address and drop the map pin so the store shows in Discover.
