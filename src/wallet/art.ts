@@ -5,6 +5,7 @@ import { Router } from 'express';
 import { stampArtSvg } from '../../shared/stampArt.js';
 import { config } from '../config.js';
 import { prisma } from '../db.js';
+import { liveRewardWhere } from '../rewards.js';
 import { readUpload } from '../uploads.js';
 
 // The Google Wallet hero image: the store's reward ladder at one balance.
@@ -43,7 +44,7 @@ artRouter.get('/wallet-art/:storeId/:file', async (req, res) => {
     return;
   }
   const balance = Number(m[1]);
-  const rewards = await prisma.reward.findMany({ where: { storeId: store.id, active: true }, select: { name: true, cost: true, icon: true } });
+  const rewards = await prisma.reward.findMany({ where: { storeId: store.id, ...liveRewardWhere() }, select: { name: true, cost: true, icon: true } });
   // Always draw the current design; an old URL just gets the newest look.
   const key = `${store.id}/${balance}-${designHash(store, rewards)}`;
   let png = cache.get(key);

@@ -7,6 +7,7 @@ import { CreateStore } from './CreateStore';
 import { CustomersTab } from './CustomersTab';
 import { DashboardTab } from './DashboardTab';
 import { MessagesTab } from './MessagesTab';
+import { PromotionsTab } from './PromotionsTab';
 import { DesignTab } from './DesignTab';
 import { ProfileTab } from './ProfileTab';
 import { RewardsTab } from './RewardsTab';
@@ -19,6 +20,7 @@ const TABS = [
   { id: 'design', label: 'Card design' },
   { id: 'profile', label: 'Store profile' },
   { id: 'rewards', label: 'Rewards' },
+  { id: 'promotions', label: 'Promotions' },
   { id: 'nfc', label: 'NFC & QR' },
 ] as const;
 type TabId = (typeof TABS)[number]['id'];
@@ -118,6 +120,7 @@ export function Portal() {
             {tab === 'design' && <DesignTab key={store.id} store={store} onUpdated={onStoreUpdated} />}
             {tab === 'profile' && <ProfileTab key={store.id} store={store} onUpdated={onStoreUpdated} />}
             {tab === 'rewards' && <RewardsTab key={store.id} store={store} />}
+            {tab === 'promotions' && <PromotionsTab key={store.id} store={store} onUpdated={onStoreUpdated} />}
             {tab === 'nfc' && <NfcTab key={store.id} store={store} />}
           </>
         )

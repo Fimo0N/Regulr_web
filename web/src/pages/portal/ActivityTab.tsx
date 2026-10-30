@@ -4,7 +4,7 @@ import { api, type OwnerStore } from '../../api';
 type Event = { id: string; kind: string; delta: number; rewardName: string | null; tag: string | null; customer: string; createdAt: string };
 
 const describe = (e: Event) =>
-  ({ welcome: 'Joined', tap: 'Stamp', redeem: `Redeemed ${e.rewardName}`, adjust: 'Adjusted by you' })[e.kind] ?? e.kind;
+  ({ welcome: 'Joined', tap: 'Stamp', redeem: `Redeemed ${e.rewardName}`, adjust: 'Adjusted by you', birthday: 'Birthday bonus' })[e.kind] ?? e.kind;
 
 export function ActivityTab({ store }: { store: OwnerStore }) {
   const [events, setEvents] = useState<Event[] | null>(null);

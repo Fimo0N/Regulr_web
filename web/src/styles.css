@@ -309,7 +309,7 @@ code.url { display: block; word-break: break-all; background: var(--bg); padding
   .shop-card { flex: 0 0 auto; box-shadow: 0 2px 10px rgb(15 23 42 / 0.08); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .me-dot, .drawer, .stamp-burst, .stamp-burst span, .wallet-card .balance.bump, .wallet-card .stamp-art .pop, .redeem-screen, .redeem-screen .check { animation: none; }
+  .me-dot, .drawer, .happy-banner.live .happy-x, .stamp-burst, .stamp-burst span, .wallet-card .balance.bump, .wallet-card .stamp-art .pop, .redeem-screen, .redeem-screen .check { animation: none; }
 }
 
 /* --- Reward icons (portal) --- */
@@ -448,3 +448,41 @@ table.clickable tbody tr:hover, table.clickable tbody tr:focus-visible { backgro
 .switch-row input[type='checkbox']:checked { background: var(--green); }
 .switch-row input[type='checkbox']:checked::after { transform: translateX(18px); }
 .switch-row input[type='checkbox']:focus-visible { outline: 2px solid var(--navy); outline-offset: 2px; }
+
+/* --- Promotions & limited rewards --- */
+.pills { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.pill { display: inline-block; font-size: 0.72rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: #f1f5f9; color: #334155; }
+.pill.soon { background: #fef3c7; color: #92400e; }
+.pill.off { background: #f5f5f4; color: var(--muted); }
+.day-picker { display: flex; gap: 6px; }
+.day-picker button { width: 38px; height: 38px; border-radius: 50%; border: 1px solid var(--border); background: var(--surface); font: inherit; font-weight: 700; cursor: pointer; }
+.day-picker button.on { background: var(--navy); color: #fff; border-color: var(--navy); }
+.promo-list { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 8px; }
+.promo-list li { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; }
+.promo-list li.inactive { opacity: 0.55; }
+.promo-badge { width: 42px; height: 42px; border-radius: 12px; background: #fef3c7; color: #92400e; font-weight: 800; display: grid; place-items: center; flex: 0 0 auto; }
+.promo-body { flex: 1; min-width: 0; display: grid; }
+.switch-inline input[type='checkbox'] { appearance: none; width: 40px; height: 24px; border-radius: 999px; background: #d6d3d1; position: relative; cursor: pointer; margin: 0; padding: 0; border: 0; transition: background 0.15s; }
+.switch-inline input[type='checkbox']::after { content: ''; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgb(0 0 0 / 0.3); transition: transform 0.15s; }
+.switch-inline input[type='checkbox']:checked { background: var(--green); }
+.switch-inline input[type='checkbox']:checked::after { transform: translateX(16px); }
+.switch-inline input[type='checkbox']:focus-visible { outline: 2px solid var(--navy); outline-offset: 2px; }
+.compact-select { width: auto; padding: 4px 8px; }
+.reward-admin { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.reward-admin li { display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px solid var(--border); border-radius: 12px; flex-wrap: wrap; }
+.reward-admin li.inactive { opacity: 0.6; }
+.reward-admin li.editing { display: block; border-color: var(--navy); background: #fafaf9; }
+.reward-admin-icon { width: 40px; height: 40px; border-radius: 10px; background: #f1f5f9; display: grid; place-items: center; flex: 0 0 auto; }
+.reward-admin-body { flex: 1; min-width: 160px; }
+.reward-form .small-details { margin: 0; }
+
+/* Customer side */
+.happy-banner { display: flex; align-items: center; gap: 12px; margin-top: 12px; padding: 12px 14px; border-radius: var(--radius); background: #fffbeb; border: 1px solid #fde68a; }
+.happy-banner > span:last-child { display: grid; }
+.happy-banner.live { background: #fef3c7; border-color: #f59e0b; }
+.happy-x { width: 40px; height: 40px; border-radius: 12px; background: #f59e0b; color: #fff; font-weight: 900; display: grid; place-items: center; flex: 0 0 auto; }
+.happy-banner.live .happy-x { animation: happy-pulse 1.8s ease-in-out infinite; }
+@keyframes happy-pulse { 50% { transform: scale(1.08); } }
+.reward.used-up { opacity: 0.6; }
+.shop-chip.happy { right: auto; left: 10px; background: #f59e0b; }
+.birthday-row select { width: auto; flex: 1 1 120px; }

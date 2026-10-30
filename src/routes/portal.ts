@@ -10,6 +10,9 @@ import { deriveFileKey } from '../nfc/sun.js';
 import { hoursSchema, ownerStore } from '../stores.js';
 import { saveUpload } from '../uploads.js';
 import { REWARD_ICONS } from '../../shared/stampArt.js';
+import { startOfLocalDate } from '../../shared/promotions.js';
+import { ownerReward } from '../rewards.js';
+import { promotionsRouter } from './promotions.js';
 import { syncStoreCard } from '../wallet/index.js';
 import { insightsRouter } from './insights.js';
 import { portalMessagesRouter } from './messages.js';
@@ -20,8 +23,17 @@ portalRouter.use(requireUser);
 // Dashboard stats, the customer list and messages to customers.
 portalRouter.use(insightsRouter);
 portalRouter.use(portalMessagesRouter);
+portalRouter.use(promotionsRouter);
 
 const hexColor = z.string().regex(/^#[0-9a-fA-F]{6}$/);
+const timezone = z.string().max(64).refine((tz) => {
+  try {
+    new Intl.DateTimeFormat('en', { timeZone: tz });
+    return true;
+  } catch {
+    return false;
+  }
+}, 'Unknown timezone');
 
 function tagUrl(slug: string, tag: { id: string; mode: string; secret: string | null }) {
   return tag.mode === 'static'
@@ -39,6 +51,8 @@ portalRouter.post('/stores', async (req, res) => {
     .object({
       name: z.string().trim().min(1).max(60),
       slug: z.string().trim().toLowerCase().regex(/^[a-z0-9-]{3,40}$/, 'Use 3-40 lowercase letters, numbers or dashes'),
+      // The owner's browser timezone, so happy hours and birthdays use the shop's clock.
+      timezone: timezone.optional(),
     })
     .parse(req.body);
   if (await prisma.store.findUnique({ where: { slug: body.slug } })) throw new HttpError(409, 'slug_taken');
@@ -64,6 +78,8 @@ portalRouter.patch('/stores/:id', async (req, res) => {
       textColor: hexColor,
       welcomeStamps: z.number().int().min(0).max(10),
       stampCooldownMinutes: z.number().int().min(0).max(24 * 60),
+      timezone,
+      birthdayStamps: z.number().int().min(0).max(20),
       description: optionalText(300),
       address: optionalText(160),
       phone: optionalText(30),
@@ -111,29 +127,49 @@ portalRouter.delete('/stores/:id/cover', async (req, res) => {
 
 portalRouter.get('/stores/:id/rewards', async (req, res) => {
   await ownedStore(res, req.params.id);
-  const rewards = await prisma.reward.findMany({ where: { storeId: req.params.id }, orderBy: { cost: 'asc' } });
-  res.json({ rewards });
+  const store = await ownedStore(res, req.params.id);
+  const rewards = await prisma.reward.findMany({ where: { storeId: store.id }, orderBy: { cost: 'asc' } });
+  res.json({ rewards: rewards.map((r) => ownerReward(r, store.timezone)) });
 });
 
+const localDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD');
 const rewardInput = z.object({
   name: z.string().trim().min(1).max(60),
   description: z.string().trim().max(140).nullable().optional(),
   cost: z.number().int().min(1).max(500),
   icon: z.enum(REWARD_ICONS).optional(),
   active: z.boolean().optional(),
+  // Limited-time window as the shop's local dates (end date included).
+  startsOn: localDate.nullable().optional(),
+  endsOn: localDate.nullable().optional(),
+  perCustomerLimit: z.number().int().min(1).max(50).nullable().optional(),
 });
 
+/** Turns the portal's local dates into the stored start and end moments. */
+function rewardData(input: Partial<z.infer<typeof rewardInput>>, tz: string) {
+  const { startsOn, endsOn, ...rest } = input;
+  if (startsOn && endsOn && endsOn < startsOn) throw new HttpError(400, 'ends_before_it_starts');
+  const nextDay = (d: string) => new Date(Date.UTC(+d.slice(0, 4), +d.slice(5, 7) - 1, +d.slice(8, 10) + 1)).toISOString().slice(0, 10);
+  return {
+    ...rest,
+    ...(startsOn !== undefined && { startsAt: startsOn ? startOfLocalDate(startsOn, tz) : null }),
+    ...(endsOn !== undefined && { endsAt: endsOn ? startOfLocalDate(nextDay(endsOn), tz) : null }),
+  };
+}
+
 portalRouter.post('/stores/:id/rewards', async (req, res) => {
-  await ownedStore(res, req.params.id);
-  const reward = await prisma.reward.create({ data: { ...rewardInput.parse(req.body), storeId: req.params.id } });
-  res.status(201).json({ reward });
+  const store = await ownedStore(res, req.params.id);
+  const input = rewardInput.parse(req.body);
+  const reward = await prisma.reward.create({ data: { ...rewardData(input, store.timezone), name: input.name, cost: input.cost, storeId: store.id } });
+  syncStoreCard(store);
+  res.status(201).json({ reward: ownerReward(reward, store.timezone) });
 });
 
 portalRouter.patch('/stores/:id/rewards/:rewardId', async (req, res) => {
-  await ownedStore(res, req.params.id);
+  const store = await ownedStore(res, req.params.id);
   const updated = await prisma.reward.updateMany({
-    where: { id: req.params.rewardId, storeId: req.params.id },
-    data: rewardInput.partial().parse(req.body),
+    where: { id: req.params.rewardId, storeId: store.id },
+    data: rewardData(rewardInput.partial().parse(req.body), store.timezone),
   });
   if (updated.count === 0) throw new HttpError(404, 'reward_not_found');
   res.json({ ok: true });
@@ -145,7 +181,7 @@ portalRouter.get('/stores/:id/tags', async (req, res) => {
   const store = await ownedStore(res, req.params.id);
   const tags = await prisma.nfcTag.findMany({ where: { storeId: store.id }, orderBy: { createdAt: 'asc' } });
   res.json({
-    tags: tags.map((t) => ({ id: t.id, label: t.label, mode: t.mode, uid: t.uid, active: t.active, url: tagUrl(store.slug, t) })),
+    tags: tags.map((t) => ({ id: t.id, label: t.label, mode: t.mode, uid: t.uid, active: t.active, stamps: t.stamps, url: tagUrl(store.slug, t) })),
   });
 });
 
@@ -182,8 +218,8 @@ portalRouter.post('/stores/:id/tags', async (req, res) => {
 
 portalRouter.patch('/stores/:id/tags/:tagId', async (req, res) => {
   await ownedStore(res, req.params.id);
-  const { active } = z.object({ active: z.boolean() }).parse(req.body);
-  const updated = await prisma.nfcTag.updateMany({ where: { id: req.params.tagId, storeId: req.params.id }, data: { active } });
+  const body = z.object({ active: z.boolean(), stamps: z.number().int().min(1).max(5) }).partial().parse(req.body);
+  const updated = await prisma.nfcTag.updateMany({ where: { id: req.params.tagId, storeId: req.params.id }, data: body });
   if (updated.count === 0) throw new HttpError(404, 'tag_not_found');
   res.json({ ok: true });
 });

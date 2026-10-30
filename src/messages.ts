@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { background } from './background.js';
 import { prisma } from './db.js';
 import { HttpError } from './errors.js';
+import { liveRewardWhere } from './rewards.js';
 import { googleWallet } from './wallet/index.js';
 
 // Messages a shop sends to a group of its customers: a Google Wallet notification for
@@ -38,7 +39,7 @@ export async function audienceMembers(storeId: string, audience: Audience, days 
   const members = await prisma.membership.findMany({ where });
   if (audience !== 'ready' && audience !== 'close') return members;
 
-  const costs = (await prisma.reward.findMany({ where: { storeId, active: true }, select: { cost: true } })).map((r) => r.cost);
+  const costs = (await prisma.reward.findMany({ where: { storeId, ...liveRewardWhere() }, select: { cost: true } })).map((r) => r.cost);
   if (!costs.length) return [];
   return members.filter((m) => {
     if (audience === 'ready') return costs.some((c) => c <= m.balance);

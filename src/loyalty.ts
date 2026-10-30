@@ -1,6 +1,8 @@
 import type { Membership } from '@prisma/client';
 import { prisma } from './db.js';
 import { HttpError } from './errors.js';
+import { activeHappyHour, birthdayYearNear, localTime } from '../shared/promotions.js';
+import { liveRewardWhere } from './rewards.js';
 import { syncBalance } from './wallet/index.js';
 
 /** Get the customer's card at a store, creating it (with welcome stamps) on first visit. */
@@ -37,6 +39,10 @@ export async function joinStore(userId: string, storeId: string): Promise<{ memb
 
 export type ClaimResult = {
   stamped: boolean;
+  /** Stamps this tap gave: the card's value × any happy hour, plus a birthday bonus. */
+  added?: number;
+  happyHour?: { name: string; multiplier: number } | null;
+  birthdayBonus?: number;
   reason?: 'cooldown' | 'already_claimed';
   nextStampAt?: Date;
   membership: Membership;
@@ -45,7 +51,7 @@ export type ClaimResult = {
 
 /** Turn a verified tap into a stamp for this customer (once per tap, respecting the store cooldown). */
 export async function claimTap(userId: string, tapId: string): Promise<ClaimResult> {
-  const tap = await prisma.tapSession.findUnique({ where: { id: tapId }, include: { store: true } });
+  const tap = await prisma.tapSession.findUnique({ where: { id: tapId }, include: { store: true, tag: true } });
   if (!tap || tap.expiresAt < new Date()) throw new HttpError(410, 'tap_expired');
   if (tap.userId && tap.userId !== userId) throw new HttpError(409, 'tap_used');
 
@@ -65,21 +71,55 @@ export async function claimTap(userId: string, tapId: string): Promise<ClaimResu
     return { ...base, stamped: false, reason: 'cooldown', nextStampAt: new Date(membership.lastStampAt.getTime() + cooldownMs) };
   }
 
+  // How many stamps: the card's value, multiplied during a happy hour (shop-local time).
+  const now = new Date();
+  const tz = tap.store.timezone;
+  const promotions = await prisma.promotion.findMany({ where: { storeId: tap.storeId, active: true } });
+  const happyHour = activeHappyHour(promotions, now, tz);
+  const stamps = tap.tag.stamps * (happyHour?.multiplier ?? 1);
+
+  // Birthday bonus: once per birthday, on a visit within 3 days of it.
+  let birthday: { year: number; bonus: number } | null = null;
+  if (tap.store.birthdayStamps > 0) {
+    const user = await prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { birthMonth: true, birthDay: true } });
+    const year = user.birthMonth && user.birthDay ? birthdayYearNear(user.birthMonth, user.birthDay, localTime(now, tz)) : null;
+    if (year !== null && membership.birthdayYear !== year) birthday = { year, bonus: tap.store.birthdayStamps };
+  }
+  const total = stamps + (birthday?.bonus ?? 0);
+
   const stamped = await prisma.$transaction(async (tx) => {
     const marked = await tx.tapSession.updateMany({ where: { id: tap.id, stampApplied: false }, data: { stampApplied: true } });
     if (marked.count === 0) return null;
     const m = await tx.membership.update({
       where: { id: membership.id },
-      data: { balance: { increment: 1 }, lifetimeStamps: { increment: 1 }, lastStampAt: new Date() },
+      data: {
+        balance: { increment: total },
+        lifetimeStamps: { increment: total },
+        lastStampAt: now,
+        ...(birthday && { birthdayYear: birthday.year }),
+      },
     });
-    await tx.stampEvent.create({ data: { storeId: tap.storeId, membershipId: m.id, kind: 'tap', delta: 1, tagId: tap.tagId } });
+    await tx.stampEvent.create({
+      data: {
+        storeId: tap.storeId,
+        membershipId: m.id,
+        kind: 'tap',
+        delta: stamps,
+        tagId: tap.tagId,
+        note: happyHour ? `${happyHour.name} ×${happyHour.multiplier}` : null,
+      },
+    });
+    if (birthday) {
+      await tx.stampEvent.create({ data: { storeId: tap.storeId, membershipId: m.id, kind: 'birthday', delta: birthday.bonus } });
+    }
     return m;
   });
   if (!stamped) return { ...base, stamped: false, reason: 'already_claimed' };
 
   membership = stamped;
-  syncBalance(membership.id, { kind: 'stamp', added: 1 });
-  return { ...base, membership, stamped: true };
+  const hh = happyHour && { name: happyHour.name, multiplier: happyHour.multiplier };
+  syncBalance(membership.id, { kind: 'stamp', added: total, happyHour: hh, birthdayBonus: birthday?.bonus ?? 0 });
+  return { ...base, membership, stamped: true, added: total, happyHour: hh, birthdayBonus: birthday?.bonus ?? 0 };
 }
 
 /** Spend stamps on a reward. Needs a fresh tap from the same customer, which proves they're at the counter. */
@@ -90,8 +130,10 @@ export async function redeem(userId: string, storeId: string, rewardId: string, 
   }
   if (tap.redeemedAt) throw new HttpError(409, 'tap_already_used_for_reward');
 
-  const reward = await prisma.reward.findUnique({ where: { id: rewardId } });
-  if (!reward || reward.storeId !== storeId || !reward.active) throw new HttpError(404, 'reward_not_found');
+  const reward = await prisma.reward.findFirst({ where: { id: rewardId, storeId } });
+  if (!reward || !reward.active) throw new HttpError(404, 'reward_not_found');
+  // Limited-time rewards can only be claimed inside their window.
+  if (!(await prisma.reward.count({ where: { id: reward.id, ...liveRewardWhere() } }))) throw new HttpError(400, 'reward_not_available');
 
   const result = await prisma.$transaction(async (tx) => {
     const usedTap = await tx.tapSession.updateMany({ where: { id: tap.id, redeemedAt: null }, data: { redeemedAt: new Date() } });
@@ -104,8 +146,12 @@ export async function redeem(userId: string, storeId: string, rewardId: string, 
     if (spent.count === 0) throw new HttpError(400, 'not_enough_stamps');
 
     const membership = await tx.membership.findUniqueOrThrow({ where: { userId_storeId: { userId, storeId } } });
+    if (reward.perCustomerLimit !== null) {
+      const claimed = await tx.stampEvent.count({ where: { membershipId: membership.id, kind: 'redeem', rewardId: reward.id } });
+      if (claimed >= reward.perCustomerLimit) throw new HttpError(409, 'reward_limit_reached');
+    }
     const event = await tx.stampEvent.create({
-      data: { storeId, membershipId: membership.id, kind: 'redeem', delta: -reward.cost, rewardName: reward.name, tagId: tap.tagId },
+      data: { storeId, membershipId: membership.id, kind: 'redeem', delta: -reward.cost, rewardName: reward.name, rewardId: reward.id, tagId: tap.tagId },
     });
     return { membership, redeemedAt: event.createdAt };
   });

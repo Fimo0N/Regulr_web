@@ -2,11 +2,17 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import { Link } from 'react-router-dom';
 import { Marker, type MapRef } from 'react-map-gl/maplibre';
 import { iconPreviewSvg, progressCaption, stampProgress } from '../../../shared/stampArt';
-import { api, type PublicStore } from '../api';
+import { api, type HappyHourInfo, type PublicStore } from '../api';
 import { DEFAULT_VIEW, MapView } from '../components/MapView';
 import { directionsUrl, distance, formatDistance, openStatus } from '../lib/hours';
 
-type MapStore = PublicStore & { latitude: number; longitude: number; member: boolean; balance: number | null };
+type MapStore = PublicStore & {
+  latitude: number;
+  longitude: number;
+  member: boolean;
+  balance: number | null;
+  happyHourNow: HappyHourInfo | null;
+};
 type LatLng = { lat: number; lng: number };
 type Filter = 'all' | 'open' | 'mine';
 
@@ -40,6 +46,11 @@ function ShopCard({ store, metres, selected, onSelect }: { store: MapStore; metr
           {store.logoUrl ? <img src={store.logoUrl} alt="" /> : store.name.slice(0, 1).toUpperCase()}
         </div>
         {store.member && <span className="shop-chip">{store.balance} ⭑</span>}
+        {store.happyHourNow && (
+          <span className="shop-chip happy" title={`${store.happyHourNow.name} until ${store.happyHourNow.endTime}`}>
+            {store.happyHourNow.multiplier}× stamps now
+          </span>
+        )}
       </div>
       <div className="shop-card-body">
         <h3 className="shop-name">{store.name}</h3>

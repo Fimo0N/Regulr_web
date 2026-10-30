@@ -5,6 +5,7 @@ import jwt from 'jsonwebtoken';
 import { config } from '../config.js';
 import { prisma } from '../db.js';
 import { stampProgress } from '../../shared/stampArt.js';
+import { liveRewardWhere } from '../rewards.js';
 import { absoluteLogoUrl } from '../stores.js';
 import { artUrl } from './art.js';
 import type { WalletProvider } from './types.js';
@@ -44,7 +45,7 @@ export class GoogleWalletProvider implements WalletProvider {
 
   /** Balance, next reward and the stamp picture: everything on the card that changes per visit. */
   private async progressFields(store: Store, membership: Membership) {
-    const rewards = await prisma.reward.findMany({ where: { storeId: store.id, active: true }, select: { name: true, cost: true, icon: true } });
+    const rewards = await prisma.reward.findMany({ where: { storeId: store.id, ...liveRewardWhere() }, select: { name: true, cost: true, icon: true } });
     const progress = stampProgress(rewards, membership.balance);
     const fields: Record<string, unknown> = {
       accountId: memberNumber(membership.id),

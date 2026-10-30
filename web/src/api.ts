@@ -39,9 +39,19 @@ export type InboxMessage = {
 };
 
 export type Config = { googleClientId: string; devLogin: boolean; googleWallet: boolean };
-export type User = { id?: string; name: string | null; email: string };
+export type User = { id?: string; name: string | null; email: string; birthMonth?: number | null; birthDay?: number | null };
 export type DayHours = { closed: boolean; open: string; close: string };
-export type Reward = { id: string; name: string; description: string | null; cost: number; icon: string; active?: boolean };
+export type Reward = {
+  id: string;
+  name: string;
+  description: string | null;
+  cost: number;
+  icon: string;
+  active?: boolean;
+  /** Limited-time rewards: when claiming stops (ISO). */
+  endsAt?: string | null;
+  perCustomerLimit?: number | null;
+};
 
 export type PublicStore = {
   name: string;
@@ -63,4 +73,9 @@ export type PublicStore = {
 export type OwnerStore = Omit<PublicStore, 'rewards'> & {
   id: string;
   stampCooldownMinutes: number;
+  timezone: string;
+  birthdayStamps: number;
 };
+
+/** A happy hour as customers see it. */
+export type HappyHourInfo = { name: string; multiplier: number; startTime: string; endTime: string };

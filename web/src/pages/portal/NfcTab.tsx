@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { api, errorText, type OwnerStore } from '../../api';
 
-type Tag = { id: string; label: string; mode: 'static' | 'sun'; uid: string | null; active: boolean; url: string };
+type Tag = { id: string; label: string; mode: 'static' | 'sun'; uid: string | null; active: boolean; stamps: number; url: string };
 
 export function NfcTab({ store }: { store: OwnerStore }) {
   const [tags, setTags] = useState<Tag[] | null>(null);
@@ -38,6 +38,11 @@ export function NfcTab({ store }: { store: OwnerStore }) {
     }
   }
 
+  async function setStamps(t: Tag, stamps: number) {
+    await api(`/api/portal/stores/${store.id}/tags/${t.id}`, { method: 'PATCH', body: { stamps } });
+    load();
+  }
+
   async function toggle(t: Tag) {
     await api(`/api/portal/stores/${store.id}/tags/${t.id}`, { method: 'PATCH', body: { active: !t.active } });
     load();
@@ -62,10 +67,10 @@ export function NfcTab({ store }: { store: OwnerStore }) {
         <div className="table-wrap">
           <table>
             <thead>
-              <tr><th>Card</th><th>Type</th><th>URL to write</th><th></th></tr>
+              <tr><th>Card</th><th>Type</th><th>Stamps per tap</th><th>URL to write</th><th></th></tr>
             </thead>
             <tbody>
-              {tags?.length === 0 && <tr><td colSpan={4} className="muted">No cards yet.</td></tr>}
+              {tags?.length === 0 && <tr><td colSpan={5} className="muted">No cards yet.</td></tr>}
               {tags?.map((t) => (
                 <tr key={t.id} className={t.active ? '' : 'inactive'}>
                   <td>
@@ -74,6 +79,13 @@ export function NfcTab({ store }: { store: OwnerStore }) {
                     {!t.active && <div className="small minus">Disabled</div>}
                   </td>
                   <td>{t.mode === 'sun' ? 'NTAG 424 DNA' : 'Basic'}</td>
+                  <td>
+                    <select className="compact-select" value={t.stamps} onChange={(e) => setStamps(t, Number(e.target.value))} aria-label={`Stamps per tap for ${t.label}`}>
+                      {[1, 2, 3, 4, 5].map((n) => (
+                        <option key={n} value={n}>+{n}</option>
+                      ))}
+                    </select>
+                  </td>
                   <td>
                     <code className="url">{t.url}</code>
                     <button className="link-btn small" onClick={() => copy(t)}>{copied === t.id ? 'Copied ✓' : 'Copy'}</button>

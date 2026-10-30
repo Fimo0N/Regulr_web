@@ -7,10 +7,13 @@ import { DAYS, DEFAULT_HOURS } from '../../lib/hours';
 type Msg = { kind: 'good' | 'bad' | 'info'; text: string } | null;
 type Pin = { lat: number; lng: number } | null;
 
+const TIMEZONES = Intl.supportedValuesOf('timeZone');
+
 export function ProfileTab({ store, onUpdated }: { store: OwnerStore; onUpdated: (s: OwnerStore) => void }) {
   const [description, setDescription] = useState(store.description ?? '');
   const [address, setAddress] = useState(store.address ?? '');
   const [phone, setPhone] = useState(store.phone ?? '');
+  const [timezone, setTimezone] = useState(store.timezone);
   const [pin, setPin] = useState<Pin>(store.latitude !== null && store.longitude !== null ? { lat: store.latitude, lng: store.longitude } : null);
   const mapRef = useRef<MapRef>(null);
   const [hasHours, setHasHours] = useState(Boolean(store.hours));
@@ -56,6 +59,7 @@ export function ProfileTab({ store, onUpdated }: { store: OwnerStore; onUpdated:
           latitude: pin?.lat ?? null,
           longitude: pin?.lng ?? null,
           hours: hasHours ? hours : null,
+          timezone,
         },
       });
       onUpdated(updated);
@@ -88,6 +92,16 @@ export function ProfileTab({ store, onUpdated }: { store: OwnerStore; onUpdated:
             </div>
           </label>
         </div>
+
+        <label className="spaced-sm">
+          Timezone
+          <select value={timezone} onChange={(e) => setTimezone(e.target.value)}>
+            {TIMEZONES.map((tz) => (
+              <option key={tz} value={tz}>{tz.replace(/_/g, ' ')}</option>
+            ))}
+          </select>
+          <span className="small muted">Opening hours, happy hours and birthdays use this clock.</span>
+        </label>
 
         <h2 className="spaced">Opening hours</h2>
         <label className="check">

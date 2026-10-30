@@ -6,12 +6,12 @@ import { prisma } from '../db.js';
 import { HttpError } from '../errors.js';
 import { clearSession, currentUser, getUser, requireUser } from '../auth.js';
 import { claimTap, joinStore, redeem } from '../loyalty.js';
+import { happyHourStatus, liveRewardWhere, publicRewardSelect as rewardSelect } from '../rewards.js';
 import { publicStore } from '../stores.js';
 import { googleWallet, removeCards } from '../wallet/index.js';
 
 export const customerRouter = Router();
 
-const rewardSelect = { id: true, name: true, description: true, cost: true, icon: true } as const;
 
 async function storeBySlug(slug: string) {
   const store = await prisma.store.findUnique({ where: { slug } });
@@ -36,7 +36,10 @@ customerRouter.get('/stores', async (req, res) => {
   const [stores, user] = await Promise.all([
     prisma.store.findMany({
       where: { latitude: { not: null }, longitude: { not: null } },
-      include: { rewards: { where: { active: true }, orderBy: { cost: 'asc' }, select: rewardSelect } },
+      include: {
+        rewards: { where: liveRewardWhere(), orderBy: { cost: 'asc' }, select: rewardSelect },
+        promotions: { where: { active: true } },
+      },
       orderBy: { name: 'asc' },
     }),
     getUser(req),
@@ -47,7 +50,12 @@ customerRouter.get('/stores', async (req, res) => {
     for (const m of memberships) balances.set(m.storeId, m.balance);
   }
   res.json({
-    stores: stores.map((s) => ({ ...publicStore(s, s.rewards), member: balances.has(s.id), balance: balances.get(s.id) ?? null })),
+    stores: stores.map((s) => ({
+      ...publicStore(s, s.rewards),
+      member: balances.has(s.id),
+      balance: balances.get(s.id) ?? null,
+      happyHourNow: happyHourStatus(s.promotions, s.timezone).now,
+    })),
   });
 });
 
@@ -56,11 +64,12 @@ customerRouter.get('/stores', async (req, res) => {
 customerRouter.post('/stores/:slug/open', async (req, res) => {
   const { tapId } = z.object({ tapId: z.string().optional() }).parse(req.body ?? {});
   const store = await storeBySlug(String(req.params.slug));
-  const [rewards, user] = await Promise.all([
-    prisma.reward.findMany({ where: { storeId: store.id, active: true }, orderBy: { cost: 'asc' }, select: rewardSelect }),
+  const [rewards, user, promotions] = await Promise.all([
+    prisma.reward.findMany({ where: { storeId: store.id, ...liveRewardWhere() }, orderBy: { cost: 'asc' }, select: rewardSelect }),
     getUser(req),
+    prisma.promotion.findMany({ where: { storeId: store.id, active: true } }),
   ]);
-  const base = { config: publicConfig(), store: publicStore(store, rewards) };
+  const base = { config: publicConfig(), store: publicStore(store, rewards), happyHours: happyHourStatus(promotions, store.timezone) };
   if (!user) {
     res.json({ ...base, user: null });
     return;
@@ -72,18 +81,32 @@ customerRouter.post('/stores/:slug/open', async (req, res) => {
     try {
       const result = await claimTap(user.id, tapId);
       membership = result.membership;
-      tap = { stamped: result.stamped, reason: result.reason, nextStampAt: result.nextStampAt, expiresAt: result.tapExpiresAt };
+      tap = {
+        stamped: result.stamped,
+        added: result.added,
+        happyHour: result.happyHour,
+        birthdayBonus: result.birthdayBonus,
+        reason: result.reason,
+        nextStampAt: result.nextStampAt,
+        expiresAt: result.tapExpiresAt,
+      };
     } catch (err) {
       if (!(err instanceof HttpError)) throw err;
       tap = { error: err.code };
     }
   }
+  // How often this customer already claimed each reward that has a per-customer limit.
+  const limited = rewards.filter((r) => r.perCustomerLimit !== null).map((r) => r.id);
+  const claims = limited.length
+    ? await prisma.stampEvent.groupBy({ by: ['rewardId'], where: { membershipId: membership.id, kind: 'redeem', rewardId: { in: limited } }, _count: { _all: true } })
+    : [];
   res.json({
     ...base,
     user: { name: user.name, email: user.email },
     joined,
     tap,
     membership: publicMembership(membership),
+    claims: Object.fromEntries(claims.map((c) => [c.rewardId, c._count._all])),
   });
 });
 
@@ -146,6 +169,17 @@ customerRouter.post('/stores/:slug/wallet/sync', requireUser, async (req, res) =
 
 // --- The signed-in customer's own data ---
 
+/** The customer's birthday (month and day only), for shops' birthday bonus. */
+customerRouter.patch('/me', requireUser, async (req, res) => {
+  const body = z
+    .object({ birthMonth: z.number().int().min(1).max(12).nullable(), birthDay: z.number().int().min(1).max(31).nullable() })
+    .refine((b) => (b.birthMonth === null) === (b.birthDay === null), 'Give both month and day, or neither')
+    .refine((b) => b.birthMonth === null || b.birthDay! <= new Date(Date.UTC(2024, b.birthMonth, 0)).getUTCDate(), 'Not a real date')
+    .parse(req.body);
+  await prisma.user.update({ where: { id: currentUser(res).id }, data: body });
+  res.json({ ok: true });
+});
+
 // --- Inbox: messages from the shops the customer has joined ---
 
 customerRouter.get('/me/messages', requireUser, async (_req, res) => {
@@ -192,7 +226,7 @@ customerRouter.patch('/stores/:slug/messages', requireUser, async (req, res) => 
 customerRouter.get('/me/cards', requireUser, async (_req, res) => {
   const memberships = await prisma.membership.findMany({
     where: { userId: currentUser(res).id },
-    include: { store: { include: { rewards: { where: { active: true }, orderBy: { cost: 'asc' }, select: rewardSelect } } } },
+    include: { store: { include: { rewards: { where: liveRewardWhere(), orderBy: { cost: 'asc' }, select: rewardSelect } } } },
     orderBy: [{ lastStampAt: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }],
   });
   res.json({

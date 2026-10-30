@@ -25,7 +25,7 @@ const SORTS = [
 ] as const;
 
 const describe = (e: Event) =>
-  ({ welcome: 'Joined', tap: 'Visit', redeem: `Claimed ${e.rewardName}`, adjust: e.delta > 0 ? 'Added by you' : 'Removed by you' })[e.kind] ?? e.kind;
+  ({ welcome: 'Joined', tap: 'Visit', redeem: `Claimed ${e.rewardName}`, adjust: e.delta > 0 ? 'Added by you' : 'Removed by you', birthday: 'Birthday bonus 🎂' })[e.kind] ?? e.kind;
 
 /** One customer: totals, a stamp adjuster and their full history. */
 function CustomerPanel({ store, id, onClose, onChanged }: { store: OwnerStore; id: string; onClose: () => void; onChanged: (balance: number) => void }) {

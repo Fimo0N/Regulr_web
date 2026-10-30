@@ -4,6 +4,54 @@ import { api, errorText } from '../api';
 import { useSession } from '../session';
 import { SignIn } from '../components/SignIn';
 
+const MONTHS = Array.from({ length: 12 }, (_, i) => new Date(2024, i, 1).toLocaleDateString([], { month: 'long' }));
+
+/** Optional birthday (month and day, no year) for shops' birthday bonus. */
+function Birthday({ month, day, onSaved }: { month: number | null; day: number | null; onSaved: () => Promise<void> }) {
+  const [m, setM] = useState(month ?? 0);
+  const [d, setD] = useState(day ?? 0);
+  const [msg, setMsg] = useState('');
+  const daysInMonth = m ? new Date(2024, m, 0).getDate() : 31;
+
+  async function save(clear = false) {
+    try {
+      await api('/api/me', { method: 'PATCH', body: clear ? { birthMonth: null, birthDay: null } : { birthMonth: m, birthDay: d } });
+      if (clear) {
+        setM(0);
+        setD(0);
+      }
+      setMsg(clear ? 'Birthday removed.' : 'Saved. Shops with a birthday bonus will treat you around your birthday.');
+      await onSaved();
+    } catch (err) {
+      setMsg(errorText(err));
+    }
+  }
+
+  return (
+    <div className="panel">
+      <h2>Your birthday 🎂</h2>
+      <p className="muted small">Optional. Some shops give bonus stamps around your birthday. We only store the day and month, never the year.</p>
+      <div className="row-inline birthday-row">
+        <select value={m} onChange={(e) => setM(Number(e.target.value))} aria-label="Month">
+          <option value={0}>Month</option>
+          {MONTHS.map((name, i) => (
+            <option key={name} value={i + 1}>{name}</option>
+          ))}
+        </select>
+        <select value={d} onChange={(e) => setD(Number(e.target.value))} aria-label="Day">
+          <option value={0}>Day</option>
+          {Array.from({ length: daysInMonth }, (_, i) => (
+            <option key={i} value={i + 1}>{i + 1}</option>
+          ))}
+        </select>
+        <button className="btn secondary" disabled={!m || !d || d > daysInMonth} onClick={() => save()}>Save</button>
+        {month && <button className="link-btn small muted" onClick={() => save(true)}>Remove</button>}
+      </div>
+      {msg && <p className="small muted">{msg}</p>}
+    </div>
+  );
+}
+
 // Public marketing site (privacy policy, terms), from VITE_WEBSITE_URL in .env.
 const WEBSITE_URL = (import.meta.env.VITE_WEBSITE_URL as string | undefined)?.replace(/\/$/, '');
 
@@ -50,6 +98,8 @@ export function Account() {
           <button className="btn secondary" onClick={signOut}>Sign out</button>
         </div>
       </div>
+
+      <Birthday month={user.birthMonth ?? null} day={user.birthDay ?? null} onSaved={refresh} />
 
       <div className="panel">
         <h2>Own a shop?</h2>

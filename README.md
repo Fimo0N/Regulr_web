@@ -80,8 +80,9 @@ Anti-cheat built in:
 | `/cards` | Customer | All their loyalty cards with balances and progress |
 | `/discover` | Customer | Map of Regulr shops (OpenStreetMap), "near me", open/closed, directions |
 | `/s/<store>` | Customer | One card: stamps, reward menu, store info, history |
-| `/account` | Customer | Sign out, delete account and data |
-| `/portal` | Shop owner | Activity, card design + logo upload, store profile (map pin, hours), rewards, NFC cards + QR |
+| `/inbox` | Customer | Messages from joined shops (also sent as Wallet notifications) |
+| `/account` | Customer | Birthday (for birthday bonuses), sign out, delete account and data |
+| `/portal` | Shop owner | Dashboard (stats), customers (adjust stamps), messages, card design + cover photo, store profile (map pin, hours, timezone), rewards (limited-time, per-customer limits), promotions (happy hours, birthday bonus), NFC cards (1–5 stamps per tap) + QR |
 
 ## Code map
 

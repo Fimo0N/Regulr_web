@@ -19,7 +19,7 @@ export function CreateStore({ canCancel, onCancel, onCreated }: { canCancel: boo
   async function submit(e: FormEvent) {
     e.preventDefault();
     try {
-      const { store } = await api<{ store: OwnerStore }>('/api/portal/stores', { method: 'POST', body: { name, slug } });
+      const { store } = await api<{ store: OwnerStore }>('/api/portal/stores', { method: 'POST', body: { name, slug, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone } });
       onCreated(store);
     } catch (err) {
       setError(errorText(err, { slug_taken: 'That link name is already taken. Try another one.' }));

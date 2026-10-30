@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { api, type Config, type PublicStore } from '../api';
+import { api, type Config, type HappyHourInfo, type PublicStore } from '../api';
 import { useSession } from '../session';
 import { SignIn } from '../components/SignIn';
 import { StoreCard } from '../components/StoreCard';
@@ -9,7 +9,16 @@ import { RedeemScreen } from '../components/RedeemScreen';
 
 type Notice = { kind: 'good' | 'info' | 'bad'; text: string } | null;
 type WalletState = 'idle' | 'syncing' | 'updated';
-type TapResult = { stamped?: boolean; reason?: string; nextStampAt?: string; expiresAt?: string; error?: string };
+type TapResult = {
+  stamped?: boolean;
+  added?: number;
+  happyHour?: { name: string; multiplier: number } | null;
+  birthdayBonus?: number;
+  reason?: string;
+  nextStampAt?: string;
+  expiresAt?: string;
+  error?: string;
+};
 type OpenResponse = {
   config: Config;
   store: PublicStore;
@@ -17,7 +26,29 @@ type OpenResponse = {
   joined?: boolean;
   tap?: TapResult | null;
   membership?: { balance: number; inWallet: boolean; messagesOff: boolean };
+  happyHours: { now: HappyHourInfo | null; today: HappyHourInfo[] };
+  /** Times this customer claimed each reward that has a per-customer limit. */
+  claims?: Record<string, number>;
 };
+
+const timesWord = (m: number) => (m === 2 ? 'Double' : m === 3 ? 'Triple' : `${m}×`);
+
+/** "Double stamps now, until 16:00" while a happy hour runs, or today's next one. */
+function HappyHourBanner({ now, today }: OpenResponse['happyHours']) {
+  const next = now ?? today[0];
+  if (!next) return null;
+  return (
+    <div className={`happy-banner${now ? ' live' : ''}`}>
+      <span className="happy-x">{next.multiplier}×</span>
+      <span>
+        <strong>{now ? `${timesWord(now.multiplier)} stamps now` : `${timesWord(next.multiplier)} stamps today`}</strong>
+        <span className="hint">
+          {next.name} · {now ? `until ${now.endTime}` : `${next.startTime}–${next.endTime}`}
+        </span>
+      </span>
+    </div>
+  );
+}
 type HistoryEvent = { id: string; kind: string; delta: number; rewardName: string | null; note: string | null; createdAt: string };
 
 const reducedMotion = typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -129,12 +160,17 @@ export function CardPage() {
         const at = new Date(tap.nextStampAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         next = { kind: 'info', text: `You got a stamp recently. The next one is available from ${at}.` };
       }
+      if (tap.stamped && tap.birthdayBonus) {
+        next = { kind: 'good', text: `Happy birthday! 🎂 ${res.store.name} gave you ${tap.birthdayBonus} bonus stamp${tap.birthdayBonus === 1 ? '' : 's'}.` };
+      } else if (tap.stamped && tap.happyHour) {
+        next = { kind: 'good', text: `${tap.happyHour.name}: ${timesWord(tap.happyHour.multiplier).toLowerCase()} stamps! You got +${tap.added}.` };
+      }
     }
     if (tapErrorRef.current) next = { kind: 'bad', text: "That tap couldn't be verified. Ask the cashier to tap again." };
     setNotice(next);
 
     if (tap?.stamped) {
-      celebrate(finalBalance - 1, finalBalance);
+      celebrate(finalBalance - (tap.added ?? 1), finalBalance);
       if (res.membership.inWallet && res.config.googleWallet) syncWallet();
     }
   }, [slug, celebrate, syncWallet]);
@@ -246,6 +282,8 @@ export function CardPage() {
 
       {notice && <div className={`notice ${notice.kind}`}>{notice.text}</div>}
 
+      <HappyHourBanner {...data.happyHours} />
+
       {config.googleWallet && (
         <>
           {walletState === 'syncing' && <div className="wallet-status">Updating your Google Wallet card…</div>}
@@ -285,14 +323,25 @@ export function CardPage() {
         {store.rewards.length === 0 && <p className="muted">No rewards yet.</p>}
         {store.rewards.map((r) => {
           const missingStamps = r.cost - balance;
+          const used = data.claims?.[r.id] ?? 0;
+          const usedUp = r.perCustomerLimit != null && used >= r.perCustomerLimit;
+          const lastDay = r.endsAt && new Date(new Date(r.endsAt).getTime() - 1).toLocaleDateString([], { day: 'numeric', month: 'short' });
           return (
-            <div className="reward" key={r.id}>
+            <div className={`reward${usedUp ? ' used-up' : ''}`} key={r.id}>
               <div className="info">
                 <div><strong>{r.name}</strong></div>
                 {r.description && <div className="hint">{r.description}</div>}
+                {(lastDay || r.perCustomerLimit) && (
+                  <div className="pills">
+                    {lastDay && <span className="pill soon">Until {lastDay}</span>}
+                    {r.perCustomerLimit != null && <span className="pill">{r.perCustomerLimit === 1 ? 'Once per customer' : `${r.perCustomerLimit} per customer`}</span>}
+                  </div>
+                )}
               </div>
               <div className="cost">{r.cost} ⭑</div>
-              {missingStamps > 0 ? (
+              {usedUp ? (
+                <span className="hint">Already claimed</span>
+              ) : missingStamps > 0 ? (
                 <span className="hint">Collect {missingStamps} more</span>
               ) : canRedeem ? (
                 <button className="btn brand" style={{ background: store.bgColor, color: store.textColor }} onClick={() => claimReward(r.id)}>
@@ -325,7 +374,17 @@ export function CardPage() {
         <ul className="history">
           {history.map((e) => (
             <li key={e.id}>
-              <span>{e.kind === 'redeem' ? `Claimed ${e.rewardName}` : e.kind === 'welcome' ? 'Joined' : e.kind === 'adjust' ? `Adjusted by the shop${e.note ? `: ${e.note}` : ''}` : 'Stamp'}</span>
+              <span>
+                {e.kind === 'redeem'
+                  ? `Claimed ${e.rewardName}`
+                  : e.kind === 'welcome'
+                    ? 'Joined'
+                    : e.kind === 'birthday'
+                      ? 'Birthday bonus 🎂'
+                      : e.kind === 'adjust'
+                        ? `Adjusted by the shop${e.note ? `: ${e.note}` : ''}`
+                        : `Stamp${e.note ? ` · ${e.note}` : ''}`}
+              </span>
               <span className="muted small">{new Date(e.createdAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</span>
               <span className={e.delta >= 0 ? 'plus' : 'minus'}>
                 {e.delta >= 0 ? '+' : ''}

@@ -47,7 +47,7 @@ export const authRouter = Router();
 
 authRouter.get('/me', async (req, res) => {
   const user = await getUser(req);
-  res.json({ user: user && { id: user.id, email: user.email, name: user.name } });
+  res.json({ user: user && { id: user.id, email: user.email, name: user.name, birthMonth: user.birthMonth, birthDay: user.birthDay } });
 });
 
 authRouter.post('/auth/google', async (req, res) => {
