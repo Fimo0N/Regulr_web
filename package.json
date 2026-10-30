@@ -8,7 +8,7 @@
     "dev": "tsx watch --ignore web/** src/server.ts",
     "build": "vite build --config web/vite.config.ts",
     "build:api": "esbuild src/app.ts --bundle --platform=node --format=esm --target=node20 --packages=external --outfile=server-dist/app.mjs",
-    "vercel-build": "prisma migrate deploy && npm run build && npm run build:api",
+    "vercel-build": "node scripts/migrate-deploy.mjs && npm run build && npm run build:api",
     "start": "tsx src/server.ts",
     "postinstall": "prisma generate",
     "db:migrate": "prisma migrate dev",
