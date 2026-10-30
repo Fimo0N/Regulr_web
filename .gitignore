@@ -11,3 +11,4 @@ uploads/
 *.mp4
 Blueprint.pdf
 .neon
+vercel-production.env
