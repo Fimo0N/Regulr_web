@@ -18,6 +18,8 @@
     "tag:key": "tsx scripts/tag-key.ts"
   },
   "dependencies": {
+    "@neon/config": "^1.9.6",
+    "@neon/env": "^1.6.6",
     "@prisma/client": "^6.10.0",
     "@resvg/resvg-js": "^2.6.2",
     "@vercel/blob": "^2.8.2",

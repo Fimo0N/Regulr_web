@@ -10,3 +10,4 @@ uploads/
 # Not part of the app
 *.mp4
 Blueprint.pdf
+.neon
