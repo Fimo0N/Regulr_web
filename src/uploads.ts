@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { put } from '@vercel/blob';
+import { HttpError } from './errors.js';
 
 // Uploaded images (logos, cover photos).
 // - On Vercel: Vercel Blob (set BLOB_READ_WRITE_TOKEN by connecting a Blob store). The
@@ -12,8 +13,17 @@ const useBlob = Boolean(process.env.BLOB_READ_WRITE_TOKEN);
 /** Stores an image and returns the URL to save on the store: https://… (Blob) or /uploads/… (disk). */
 export async function saveUpload(folder: 'logos' | 'covers', name: string, body: Buffer, contentType: string) {
   if (useBlob) {
-    const blob = await put(`${folder}/${name}`, body, { access: 'public', contentType, addRandomSuffix: false });
-    return blob.url;
+    try {
+      const blob = await put(`${folder}/${name}`, body, { access: 'public', contentType, addRandomSuffix: false });
+      return blob.url;
+    } catch (err) {
+      console.error('[uploads] Vercel Blob upload failed', err);
+      throw new HttpError(502, 'upload_storage_failed', err instanceof Error ? err.message : String(err));
+    }
+  }
+  // Vercel's disk is read-only, so without a Blob store there is nowhere to save.
+  if (process.env.VERCEL) {
+    throw new HttpError(503, 'uploads_not_configured', 'Connect a Blob store in Vercel (Storage tab), then redeploy.');
   }
   await mkdir(path.join(UPLOADS_DIR, folder), { recursive: true });
   await writeFile(path.join(UPLOADS_DIR, folder, name), body);

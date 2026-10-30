@@ -23,7 +23,8 @@ export function errorText(err: unknown, messages: Record<string, string> = {}) {
   if (!(err instanceof ApiError)) return 'Something went wrong. Please try again.';
   const issue = err.data?.issues?.[0];
   if (issue) return `${issue.path.join('.')}: ${issue.message}`;
-  return messages[err.code] ?? err.code.replace(/_/g, ' ');
+  const text = messages[err.code] ?? err.code.replace(/_/g, ' ');
+  return err.data?.detail ? `${text}: ${err.data.detail}` : text;
 }
 
 // --- Shapes returned by the API ---
