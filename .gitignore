@@ -4,6 +4,7 @@ node_modules/
 *.db-journal
 secrets/
 web/dist/
+server-dist/
 uploads/
 
 # Not part of the app

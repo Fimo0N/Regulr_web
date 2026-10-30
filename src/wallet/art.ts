@@ -1,13 +1,11 @@
 import { createHash } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
-import path from 'node:path';
 import type { Store } from '@prisma/client';
 import { Resvg } from '@resvg/resvg-js';
 import { Router } from 'express';
 import { stampArtSvg } from '../../shared/stampArt.js';
 import { config } from '../config.js';
 import { prisma } from '../db.js';
-import { COVER_DIR } from '../uploads.js';
+import { readUpload } from '../uploads.js';
 
 // The Google Wallet hero image: the store's reward ladder at one balance.
 //   /wallet-art/<storeId>/<balance>-<design>.png
@@ -27,14 +25,8 @@ export function artUrl(store: Store, rewards: ArtReward[], balance: number) {
 
 /** The uploaded cover photo as a data: URI, since the PNG renderer can't fetch URLs. */
 async function coverDataUri(coverUrl: string | null) {
-  if (!coverUrl?.startsWith('/uploads/covers/')) return null;
-  const file = path.basename(coverUrl);
-  try {
-    const bytes = await readFile(path.join(COVER_DIR, file));
-    return `data:image/${file.endsWith('.png') ? 'png' : 'jpeg'};base64,${bytes.toString('base64')}`;
-  } catch {
-    return null;
-  }
+  const image = await readUpload(coverUrl);
+  return image && `data:${image.type};base64,${image.bytes.toString('base64')}`;
 }
 
 // Small in-memory cache: the same few pictures are requested over and over.

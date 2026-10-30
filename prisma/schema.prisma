@@ -1,12 +1,15 @@
-// SQLite for local development. Switch provider to "postgresql" for production
-// (e.g. Supabase / Neon) — the models below are compatible with both.
+// Postgres everywhere (Neon on Vercel). Schema changes go through migrations:
+//   npx prisma migrate dev --name <what-changed>   (locally, creates prisma/migrations/...)
+// Vercel applies them on deploy with `prisma migrate deploy`.
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  // Pooled connection for the app; direct one for migrations (Neon sets both on Vercel).
+  url       = env("DATABASE_URL")
+  directUrl = env("DATABASE_URL_UNPOOLED")
 }
 
 model User {

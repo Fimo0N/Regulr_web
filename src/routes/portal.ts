@@ -1,6 +1,4 @@
 import { randomBytes } from 'node:crypto';
-import { mkdir, writeFile } from 'node:fs/promises';
-import path from 'node:path';
 import express, { Router, type Response } from 'express';
 import QRCode from 'qrcode';
 import { z } from 'zod';
@@ -10,7 +8,7 @@ import { HttpError } from '../errors.js';
 import { currentUser, requireUser } from '../auth.js';
 import { deriveFileKey } from '../nfc/sun.js';
 import { hoursSchema, ownerStore } from '../stores.js';
-import { COVER_DIR, LOGO_DIR } from '../uploads.js';
+import { saveUpload } from '../uploads.js';
 import { REWARD_ICONS } from '../../shared/stampArt.js';
 import { syncStoreCard } from '../wallet/index.js';
 
@@ -61,7 +59,7 @@ portalRouter.patch('/stores/:id', async (req, res) => {
   const { hours, ...body } = z
     .object({
       name: z.string().trim().min(1).max(60),
-      logoUrl: z.union([z.string().url().startsWith('https://'), z.string().startsWith('/uploads/')]).nullable(),
+      logoUrl: z.union([z.string().url().startsWith('https://'), z.string().regex(/^\/uploads\/logos\/[\w.-]+$/)]).nullable(),
       bgColor: hexColor,
       textColor: hexColor,
       welcomeStamps: z.number().int().min(0).max(10),
@@ -86,8 +84,8 @@ portalRouter.patch('/stores/:id', async (req, res) => {
 // Logo and cover photo uploads: the raw image is the request body (no multipart needed).
 const IMAGE_TYPES: Record<string, string> = { 'image/png': 'png', 'image/jpeg': 'jpg' };
 const IMAGE_KINDS = {
-  logo: { dir: LOGO_DIR, field: 'logoUrl', folder: 'logos', limit: '2mb' },
-  cover: { dir: COVER_DIR, field: 'coverUrl', folder: 'covers', limit: '3mb' },
+  logo: { field: 'logoUrl', folder: 'logos', limit: '2mb' },
+  cover: { field: 'coverUrl', folder: 'covers', limit: '3mb' },
 } as const;
 
 for (const [kind, spec] of Object.entries(IMAGE_KINDS)) {
@@ -95,10 +93,9 @@ for (const [kind, spec] of Object.entries(IMAGE_KINDS)) {
     await ownedStore(res, req.params.id);
     const ext = IMAGE_TYPES[req.get('content-type') ?? ''];
     if (!ext || !Buffer.isBuffer(req.body) || req.body.length === 0) throw new HttpError(400, `${kind}_must_be_png_or_jpg`);
-    await mkdir(spec.dir, { recursive: true });
     const file = `${req.params.id}-${randomBytes(4).toString('hex')}.${ext}`;
-    await writeFile(path.join(spec.dir, file), req.body);
-    const store = await prisma.store.update({ where: { id: req.params.id }, data: { [spec.field]: `/uploads/${spec.folder}/${file}` } });
+    const url = await saveUpload(spec.folder, file, req.body, req.get('content-type')!);
+    const store = await prisma.store.update({ where: { id: req.params.id }, data: { [spec.field]: url } });
     syncStoreCard(store);
     res.json({ store: ownerStore(store) });
   });
