@@ -147,35 +147,80 @@ label.check { display: flex; align-items: center; gap: 8px; font-weight: 500; }
 .empty p { margin: 0; }
 .empty .btn { margin-top: 14px; }
 
-/* --- Discover map --- */
-.map-wrap { position: relative; height: 42dvh; min-height: 260px; }
-.map { position: absolute; inset: 0; z-index: 0; }
-.locate-btn { position: absolute; right: 12px; bottom: 12px; z-index: 500; box-shadow: 0 4px 14px rgb(0 0 0 / 0.25); }
-.discover-list .page-title { margin-top: 0; }
-.shop {
-  display: flex; gap: 12px; padding: 12px; margin-bottom: 10px; background: var(--surface);
-  border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer;
-}
-.shop.selected { border-color: var(--navy); box-shadow: 0 0 0 1px var(--navy); }
-.shop-logo {
-  width: 48px; height: 48px; border-radius: 50%; flex: 0 0 auto; display: grid; place-items: center;
-  font-weight: 800; font-size: 1.2rem; overflow: hidden;
-}
-.shop-logo img { width: 100%; height: 100%; object-fit: cover; }
-.shop-body { flex: 1; min-width: 0; display: grid; gap: 3px; }
-.shop-name { font-weight: 700; display: flex; align-items: center; }
-.shop-rewards { margin-top: 4px; }
-.shop .actions { margin-top: 8px; }
+/* --- Discover: full-screen map with floating search and swipeable shop cards --- */
+.discover { position: relative; height: calc(100dvh - var(--tabbar-h) - env(safe-area-inset-bottom)); overflow: hidden; }
+.discover .maplibregl-map { position: absolute; inset: 0; }
+.discover .maplibregl-ctrl-bottom-left { bottom: 262px; }
 
-.map-pin {
-  width: 44px; height: 44px; border-radius: 50%; border: 3px solid #fff; overflow: hidden;
-  display: grid; place-items: center; font-weight: 800; font-size: 1.1rem;
-  box-shadow: 0 4px 12px rgb(0 0 0 / 0.35); transition: transform 0.15s;
+.map-top { position: absolute; top: 0; left: 0; right: 0; z-index: 3; padding: 12px 12px 0; display: grid; gap: 8px; pointer-events: none; }
+.map-top > * { pointer-events: auto; }
+.map-search {
+  display: flex; align-items: center; gap: 10px; background: var(--surface); border-radius: 999px; padding: 0 16px; height: 50px;
+  box-shadow: 0 6px 24px rgb(15 23 42 / 0.14), 0 1px 3px rgb(15 23 42 / 0.08);
 }
-.map-pin img { width: 100%; height: 100%; object-fit: cover; }
-.map-pin.member { border-color: var(--green); }
-.map-pin.selected { transform: scale(1.2); }
-.me-dot { width: 18px; height: 18px; border-radius: 50%; background: #2563eb; border: 3px solid #fff; box-shadow: 0 0 0 6px rgb(37 99 235 / 0.25); }
+.map-search svg { width: 20px; height: 20px; color: var(--muted); flex: 0 0 auto; }
+.map-search input { border: 0; outline: 0; background: transparent; padding: 0; font-size: 1rem; height: 100%; flex: 1; min-width: 0; }
+.map-chips { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; justify-self: start; max-width: 100%; }
+.chip {
+  border: 0; border-radius: 999px; padding: 8px 14px; font: inherit; font-size: 0.88rem; font-weight: 600; cursor: pointer; white-space: nowrap;
+  background: var(--surface); color: var(--text); box-shadow: 0 2px 10px rgb(15 23 42 / 0.12);
+}
+.chip.on { background: var(--navy); color: #fff; }
+.map-toast { justify-self: start; background: var(--navy); color: #fff; font-size: 0.85rem; padding: 8px 12px; border-radius: 10px; }
+
+.locate-fab {
+  position: absolute; right: 14px; bottom: 268px; z-index: 3; width: 48px; height: 48px; border-radius: 50%; border: 0; cursor: pointer;
+  background: var(--surface); color: var(--navy); display: grid; place-items: center; box-shadow: 0 6px 20px rgb(15 23 42 / 0.2);
+}
+.locate-fab svg { width: 22px; height: 22px; }
+.locate-fab.on { color: #2563eb; }
+.locate-fab:disabled { opacity: 0.6; }
+
+/* Shop pins */
+.pin { position: relative; display: grid; justify-items: center; cursor: pointer; transition: transform 0.18s ease; transform-origin: bottom center; }
+.pin::after { content: ''; width: 12px; height: 12px; margin-top: -7px; background: var(--pin); transform: rotate(45deg); border-right: 3px solid #fff; border-bottom: 3px solid #fff; }
+.pin-face {
+  width: 44px; height: 44px; border-radius: 50%; border: 3px solid #fff; overflow: hidden; display: grid; place-items: center;
+  font-weight: 800; font-size: 1.1rem; box-shadow: 0 6px 16px rgb(15 23 42 / 0.3); position: relative; z-index: 1;
+}
+.pin-face img { width: 100%; height: 100%; object-fit: cover; }
+.pin.selected { transform: scale(1.25); }
+.pin-badge {
+  position: absolute; top: -6px; right: -10px; z-index: 2; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 999px;
+  background: var(--green); color: #fff; font-size: 0.75rem; font-weight: 800; display: grid; place-items: center; border: 2px solid #fff;
+}
+.me-dot { width: 18px; height: 18px; border-radius: 50%; background: #2563eb; border: 3px solid #fff; box-shadow: 0 0 0 0 rgb(37 99 235 / 0.45); animation: me-pulse 2s infinite; }
+@keyframes me-pulse { 70% { box-shadow: 0 0 0 16px rgb(37 99 235 / 0); } 100% { box-shadow: 0 0 0 0 rgb(37 99 235 / 0); } }
+
+/* Shop cards: a sideways-swiping rail on phones */
+.shop-rail {
+  position: absolute; left: 0; right: 0; bottom: 12px; z-index: 3; display: flex; gap: 12px; padding: 4px 16px 8px;
+  overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none;
+}
+.shop-rail::-webkit-scrollbar, .map-chips::-webkit-scrollbar { display: none; }
+.shop-card {
+  flex: 0 0 min(300px, 82vw); scroll-snap-align: center; background: var(--surface); border-radius: 20px; overflow: hidden; cursor: pointer;
+  box-shadow: 0 10px 30px rgb(15 23 42 / 0.18); border: 2px solid transparent; transition: border-color 0.15s;
+}
+.shop-card.selected { border-color: var(--navy); }
+.shop-card.placeholder { padding: 18px; color: var(--muted); cursor: default; }
+.shop-cover { position: relative; height: 72px; }
+.shop-cover-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.shop-cover-logo {
+  position: absolute; left: 14px; bottom: -20px; width: 46px; height: 46px; border-radius: 50%; border: 3px solid var(--surface);
+  overflow: hidden; display: grid; place-items: center; font-weight: 800; box-shadow: 0 2px 8px rgb(0 0 0 / 0.15);
+}
+.shop-cover-logo img { width: 100%; height: 100%; object-fit: cover; }
+.shop-chip { position: absolute; right: 10px; top: 10px; background: var(--green); color: #fff; font-weight: 800; font-size: 0.8rem; padding: 3px 10px; border-radius: 999px; }
+.shop-card-body { padding: 26px 14px 14px; display: grid; gap: 4px; }
+.shop-name { margin: 0; font-size: 1.05rem; }
+.shop-meta { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 0.82rem; color: var(--muted); }
+.shop-line { font-size: 0.86rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.shop-icons { display: flex; gap: 6px; margin-top: 2px; }
+.shop-icons span { width: 26px; height: 26px; border-radius: 8px; background: #f1f5f9; color: var(--navy); padding: 4px; display: block; }
+.shop-actions { display: flex; gap: 8px; margin-top: 8px; }
+.shop-actions .btn { flex: 1; text-align: center; }
+
 .drop-pin {
   width: 28px; height: 28px; background: var(--bad); border: 3px solid #fff;
   border-radius: 50% 50% 50% 0; transform: rotate(-45deg); box-shadow: 0 4px 10px rgb(0 0 0 / 0.35);
@@ -252,13 +297,19 @@ code.url { display: block; word-break: break-all; background: var(--bg); padding
   .grid-2 { grid-template-columns: 1fr; }
 }
 @media (min-width: 900px) {
-  /* Discover: map beside the list on wide screens. */
-  .discover { display: grid; grid-template-columns: 1fr 420px; height: calc(100dvh - var(--tabbar-h)); }
-  .map-wrap { height: 100%; order: 2; }
-  .discover-list { overflow-y: auto; max-width: none; height: 100%; }
+  /* Discover: shop cards become a scrolling list in a side panel on wide screens. */
+  .discover .maplibregl-map { left: 400px; }
+  .discover .maplibregl-ctrl-bottom-left { bottom: 0; }
+  .map-top { left: 400px; max-width: 520px; }
+  .locate-fab { bottom: 24px; right: 24px; }
+  .shop-rail {
+    top: 0; bottom: 0; left: 0; right: auto; width: 400px; flex-direction: column; gap: 14px; padding: 16px;
+    overflow-x: hidden; overflow-y: auto; scroll-snap-type: none; background: var(--bg); border-right: 1px solid var(--border);
+  }
+  .shop-card { flex: 0 0 auto; box-shadow: 0 2px 10px rgb(15 23 42 / 0.08); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .stamp-burst, .stamp-burst span, .wallet-card .balance.bump, .wallet-card .stamp-art .pop, .redeem-screen, .redeem-screen .check { animation: none; }
+  .me-dot, .stamp-burst, .stamp-burst span, .wallet-card .balance.bump, .wallet-card .stamp-art .pop, .redeem-screen, .redeem-screen .check { animation: none; }
 }
 
 /* --- Reward icons (portal) --- */

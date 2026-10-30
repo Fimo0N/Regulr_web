@@ -4,6 +4,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import './styles.css';
 import { SessionProvider } from './session';
 import { CustomerLayout } from './components/CustomerLayout';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { CardPage } from './pages/CardPage';
 import { MyCards } from './pages/MyCards';
 import { Account } from './pages/Account';
@@ -16,19 +17,21 @@ const loading = <div className="page"><p className="muted">Loading…</p></div>;
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <SessionProvider>
-      <BrowserRouter>
-        <Routes>
-          <Route element={<CustomerLayout />}>
-            <Route path="/cards" element={<MyCards />} />
-            <Route path="/discover" element={<Suspense fallback={loading}><Discover /></Suspense>} />
-            <Route path="/account" element={<Account />} />
-            <Route path="/s/:slug" element={<CardPage />} />
-          </Route>
-          <Route path="/portal/*" element={<Suspense fallback={loading}><Portal /></Suspense>} />
-          <Route path="*" element={<Navigate to="/cards" replace />} />
-        </Routes>
-      </BrowserRouter>
-    </SessionProvider>
+    <ErrorBoundary>
+      <SessionProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route element={<CustomerLayout />}>
+              <Route path="/cards" element={<MyCards />} />
+              <Route path="/discover" element={<Suspense fallback={loading}><Discover /></Suspense>} />
+              <Route path="/account" element={<Account />} />
+              <Route path="/s/:slug" element={<CardPage />} />
+            </Route>
+            <Route path="/portal/*" element={<Suspense fallback={loading}><Portal /></Suspense>} />
+            <Route path="*" element={<Navigate to="/cards" replace />} />
+          </Routes>
+        </BrowserRouter>
+      </SessionProvider>
+    </ErrorBoundary>
   </StrictMode>,
 );
