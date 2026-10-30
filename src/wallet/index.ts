@@ -1,5 +1,6 @@
 import type { Membership, Store } from '@prisma/client';
 import { progressCaption, stampProgress, type ProgressReward } from '../../shared/stampArt.js';
+import { background } from '../background.js';
 import { config } from '../config.js';
 import { prisma } from '../db.js';
 import { GoogleWalletProvider } from './google.js';
@@ -11,7 +12,7 @@ const providers: WalletProvider[] = [googleWallet].filter((p): p is GoogleWallet
 
 export function syncStoreCard(store: Store) {
   for (const provider of providers) {
-    provider.upsertStoreCard(store).catch((err) => console.error(`[${provider.name}-wallet] card sync failed`, err));
+    background(`${provider.name}-wallet card sync`, () => provider.upsertStoreCard(store));
   }
 }
 
@@ -52,9 +53,9 @@ export function notificationFor(storeName: string, rewards: ProgressReward[], ba
   return { header: `+${event.added} ${plural} at ${storeName}`, body: next ? `${next}.` : `You have ${balance} stamps.` };
 }
 
-// Fire-and-forget: a wallet outage must never block stamping at the counter.
+// In the background: a wallet outage must never block stamping at the counter.
 export function syncBalance(membershipId: string, event?: BalanceEvent) {
-  void (async () => {
+  background('wallet balance sync', async () => {
     const membership = await prisma.membership.findUnique({ where: { id: membershipId }, include: { store: true } });
     if (!membership) return;
     if (googleWallet && membership.googleObjectId) {
@@ -66,5 +67,5 @@ export function syncBalance(membershipId: string, event?: BalanceEvent) {
         await googleWallet.notify(membership, header, body);
       }
     }
-  })().catch((err) => console.error('[wallet] balance sync failed', err));
+  });
 }

@@ -8,6 +8,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { CardPage } from './pages/CardPage';
 import { MyCards } from './pages/MyCards';
 import { Account } from './pages/Account';
+import { Inbox } from './pages/Inbox';
 
 // The map library and the portal load only when opened, so the page a customer
 // lands on after an NFC tap stays small and fast.
@@ -24,6 +25,7 @@ createRoot(document.getElementById('root')!).render(
             <Route element={<CustomerLayout />}>
               <Route path="/cards" element={<MyCards />} />
               <Route path="/discover" element={<Suspense fallback={loading}><Discover /></Suspense>} />
+              <Route path="/inbox" element={<Inbox />} />
               <Route path="/account" element={<Account />} />
               <Route path="/s/:slug" element={<CardPage />} />
             </Route>

@@ -29,6 +29,15 @@ export function errorText(err: unknown, messages: Record<string, string> = {}) {
 
 // --- Shapes returned by the API ---
 
+export type InboxMessage = {
+  id: string;
+  title: string;
+  body: string;
+  createdAt: string;
+  read: boolean;
+  store: { name: string; slug: string; logoUrl: string | null; bgColor: string; textColor: string };
+};
+
 export type Config = { googleClientId: string; devLogin: boolean; googleWallet: boolean };
 export type User = { id?: string; name: string | null; email: string };
 export type DayHours = { closed: boolean; open: string; close: string };

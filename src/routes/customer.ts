@@ -24,7 +24,7 @@ function publicConfig() {
 }
 
 function publicMembership(m: Membership) {
-  return { balance: m.balance, inWallet: Boolean(m.googleObjectId) };
+  return { balance: m.balance, inWallet: Boolean(m.googleObjectId), messagesOff: m.messagesOff };
 }
 
 customerRouter.get('/config', (_req, res) => {
@@ -145,6 +145,49 @@ customerRouter.post('/stores/:slug/wallet/sync', requireUser, async (req, res) =
 });
 
 // --- The signed-in customer's own data ---
+
+// --- Inbox: messages from the shops the customer has joined ---
+
+customerRouter.get('/me/messages', requireUser, async (_req, res) => {
+  const deliveries = await prisma.messageDelivery.findMany({
+    where: { membership: { userId: currentUser(res).id } },
+    orderBy: { createdAt: 'desc' },
+    take: 50,
+    include: {
+      message: { select: { title: true, body: true } },
+      membership: { select: { store: { select: { name: true, slug: true, logoUrl: true, bgColor: true, textColor: true } } } },
+    },
+  });
+  res.json({
+    unread: deliveries.filter((d) => !d.readAt).length,
+    messages: deliveries.map((d) => ({
+      id: d.id,
+      title: d.message.title,
+      body: d.message.body,
+      createdAt: d.createdAt,
+      read: Boolean(d.readAt),
+      store: d.membership.store,
+    })),
+  });
+});
+
+customerRouter.post('/me/messages/read', requireUser, async (req, res) => {
+  const { ids } = z.object({ ids: z.array(z.string()).max(100) }).parse(req.body);
+  await prisma.messageDelivery.updateMany({
+    where: { id: { in: ids }, readAt: null, membership: { userId: currentUser(res).id } },
+    data: { readAt: new Date() },
+  });
+  res.json({ ok: true });
+});
+
+/** The customer turns messages from one shop on or off. */
+customerRouter.patch('/stores/:slug/messages', requireUser, async (req, res) => {
+  const { off } = z.object({ off: z.boolean() }).parse(req.body);
+  const store = await storeBySlug(String(req.params.slug));
+  const updated = await prisma.membership.updateMany({ where: { userId: currentUser(res).id, storeId: store.id }, data: { messagesOff: off } });
+  if (updated.count === 0) throw new HttpError(404, 'not_a_member');
+  res.json({ messagesOff: off });
+});
 
 customerRouter.get('/me/cards', requireUser, async (_req, res) => {
   const memberships = await prisma.membership.findMany({

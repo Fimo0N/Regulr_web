@@ -12,12 +12,14 @@ import { saveUpload } from '../uploads.js';
 import { REWARD_ICONS } from '../../shared/stampArt.js';
 import { syncStoreCard } from '../wallet/index.js';
 import { insightsRouter } from './insights.js';
+import { portalMessagesRouter } from './messages.js';
 import { ownedStore } from './owned.js';
 
 export const portalRouter = Router();
 portalRouter.use(requireUser);
-// Dashboard stats and the customer list.
+// Dashboard stats, the customer list and messages to customers.
 portalRouter.use(insightsRouter);
+portalRouter.use(portalMessagesRouter);
 
 const hexColor = z.string().regex(/^#[0-9a-fA-F]{6}$/);
 

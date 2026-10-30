@@ -47,6 +47,7 @@ model Store {
   rewards              Reward[]
   tags                 NfcTag[]
   memberships          Membership[]
+  messages             Message[]
   taps                 TapSession[]
   events               StampEvent[]
 }
@@ -108,8 +109,11 @@ model Membership {
   lifetimeStamps Int          @default(0)
   lastStampAt    DateTime?
   googleObjectId String?
+  // The customer turned off messages from this shop.
+  messagesOff    Boolean      @default(false)
   createdAt      DateTime     @default(now())
   events         StampEvent[]
+  deliveries     MessageDelivery[]
 
   @@unique([userId, storeId])
   @@index([storeId, createdAt])
@@ -133,4 +137,38 @@ model StampEvent {
 
   @@index([storeId, createdAt])
   @@index([membershipId, kind])
+}
+
+// A message a shop sent to some of its customers (Wallet notification + web inbox).
+// audience: "all" | "lapsed" | "close" | "ready" | "new"
+model Message {
+  id           String            @id @default(cuid())
+  storeId      String
+  store        Store             @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  title        String
+  body         String
+  audience     String
+  // For "lapsed": no visit in this many days.
+  audienceDays Int?
+  recipients   Int               @default(0)
+  // How many recipients had the card in Google Wallet and were notified there.
+  walletSent   Int               @default(0)
+  createdAt    DateTime          @default(now())
+  deliveries   MessageDelivery[]
+
+  @@index([storeId, createdAt])
+}
+
+// One customer's copy of a message, for their inbox and read tracking.
+model MessageDelivery {
+  id           String     @id @default(cuid())
+  messageId    String
+  message      Message    @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  membershipId String
+  membership   Membership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  readAt       DateTime?
+  createdAt    DateTime   @default(now())
+
+  @@unique([messageId, membershipId])
+  @@index([membershipId, createdAt])
 }

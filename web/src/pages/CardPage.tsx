@@ -16,7 +16,7 @@ type OpenResponse = {
   user: { name: string | null; email: string } | null;
   joined?: boolean;
   tap?: TapResult | null;
-  membership?: { balance: number; inWallet: boolean };
+  membership?: { balance: number; inWallet: boolean; messagesOff: boolean };
 };
 type HistoryEvent = { id: string; kind: string; delta: number; rewardName: string | null; note: string | null; createdAt: string };
 
@@ -48,6 +48,7 @@ export function CardPage() {
   const [missing, setMissing] = useState(false);
   const [balance, setBalance] = useState(0);
   const [inWallet, setInWallet] = useState(false);
+  const [messagesOff, setMessagesOff] = useState(false);
   const [tapExpiresAt, setTapExpiresAt] = useState<Date | null>(null);
   const [notice, setNotice] = useState<Notice>(null);
   const [walletState, setWalletState] = useState<WalletState>('idle');
@@ -108,6 +109,7 @@ export function CardPage() {
     const finalBalance = res.membership.balance;
     setBalance(finalBalance);
     setInWallet(res.membership.inWallet);
+    setMessagesOff(res.membership.messagesOff);
 
     let next: Notice = null;
     if (res.joined) {
@@ -178,6 +180,16 @@ export function CardPage() {
         tap_already_used_for_reward: 'That tap was already used for a reward. Ask for another tap.',
       };
       setNotice({ kind: 'bad', text: messages[err?.code] ?? 'Something went wrong. Please try again.' });
+    }
+  }
+
+  async function toggleMessages() {
+    const off = !messagesOff;
+    setMessagesOff(off);
+    try {
+      await api(`/api/stores/${slug}/messages`, { method: 'PATCH', body: { off } });
+    } catch {
+      setMessagesOff(!off);
     }
   }
 
@@ -295,6 +307,14 @@ export function CardPage() {
       </div>
 
       <StoreInfo store={store} />
+
+      <label className="switch-row">
+        <span>
+          <strong>Messages from {store.name}</strong>
+          <span className="hint">News and offers in your inbox{inWallet ? ' and Google Wallet' : ''}</span>
+        </span>
+        <input type="checkbox" role="switch" aria-label={`Messages from ${store.name}`} checked={!messagesOff} onChange={toggleMessages} />
+      </label>
 
       <h3 className="section-title">Your history</h3>
       {history === null ? (
