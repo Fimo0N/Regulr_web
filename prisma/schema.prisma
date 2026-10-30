@@ -112,6 +112,7 @@ model Membership {
   events         StampEvent[]
 
   @@unique([userId, storeId])
+  @@index([storeId, createdAt])
 }
 
 // Ledger behind the merchant's live activity feed.
@@ -126,7 +127,10 @@ model StampEvent {
   delta        Int
   rewardName   String?
   tagId        String?
+  // Why the shop adjusted the balance by hand ("adjust" events), shown to the customer.
+  note         String?
   createdAt    DateTime   @default(now())
 
   @@index([storeId, createdAt])
+  @@index([membershipId, kind])
 }

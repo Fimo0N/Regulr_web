@@ -18,7 +18,7 @@ type OpenResponse = {
   tap?: TapResult | null;
   membership?: { balance: number; inWallet: boolean };
 };
-type HistoryEvent = { id: string; kind: string; delta: number; rewardName: string | null; createdAt: string };
+type HistoryEvent = { id: string; kind: string; delta: number; rewardName: string | null; note: string | null; createdAt: string };
 
 const reducedMotion = typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 const isAndroid = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent);
@@ -305,7 +305,7 @@ export function CardPage() {
         <ul className="history">
           {history.map((e) => (
             <li key={e.id}>
-              <span>{e.kind === 'redeem' ? `Claimed ${e.rewardName}` : e.kind === 'welcome' ? 'Joined' : e.kind === 'adjust' ? 'Adjusted by the shop' : 'Stamp'}</span>
+              <span>{e.kind === 'redeem' ? `Claimed ${e.rewardName}` : e.kind === 'welcome' ? 'Joined' : e.kind === 'adjust' ? `Adjusted by the shop${e.note ? `: ${e.note}` : ''}` : 'Stamp'}</span>
               <span className="muted small">{new Date(e.createdAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</span>
               <span className={e.delta >= 0 ? 'plus' : 'minus'}>
                 {e.delta >= 0 ? '+' : ''}

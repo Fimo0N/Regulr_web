@@ -24,13 +24,20 @@ export async function removeCards(memberships: Membership[]) {
 }
 
 /** What just happened, so the card can tell the customer about it. */
-export type BalanceEvent = { kind: 'stamp'; added: number } | { kind: 'redeem'; rewardName: string; cost: number };
+export type BalanceEvent =
+  | { kind: 'stamp'; added: number }
+  | { kind: 'redeem'; rewardName: string; cost: number }
+  | { kind: 'adjust'; added: number; note: string | null };
 
-/** The phone notification for a stamp or a claimed reward. */
+/** The phone notification for a stamp, a claimed reward or a manual adjustment by the shop. */
 export function notificationFor(storeName: string, rewards: ProgressReward[], balance: number, event: BalanceEvent) {
   const next = progressCaption(stampProgress(rewards, balance));
   if (event.kind === 'redeem') {
     return { header: `Enjoy your ${event.rewardName}!`, body: `You used ${event.cost} stamps at ${storeName}. ${balance} left.` };
+  }
+  if (event.kind === 'adjust' && event.added < 0) {
+    const n = -event.added;
+    return { header: `${storeName} updated your card`, body: `${n} stamp${n === 1 ? '' : 's'} removed${event.note ? `: ${event.note}` : ''}. ${balance} left.` };
   }
   // A reward the customer couldn't afford before this stamp, but can now.
   const before = balance - event.added;
@@ -38,7 +45,11 @@ export function notificationFor(storeName: string, rewards: ProgressReward[], ba
   if (unlocked) {
     return { header: `${unlocked.name} is ready!`, body: `Show your ${storeName} card at the counter to claim it.` };
   }
-  return { header: `+${event.added} stamp at ${storeName}`, body: next ? `${next}.` : `You have ${balance} stamps.` };
+  const plural = event.added === 1 ? 'stamp' : 'stamps';
+  if (event.kind === 'adjust') {
+    return { header: `+${event.added} ${plural} from ${storeName}`, body: event.note || (next ? `${next}.` : `You have ${balance} stamps.`) };
+  }
+  return { header: `+${event.added} ${plural} at ${storeName}`, body: next ? `${next}.` : `You have ${balance} stamps.` };
 }
 
 // Fire-and-forget: a wallet outage must never block stamping at the counter.

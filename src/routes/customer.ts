@@ -100,7 +100,7 @@ customerRouter.get('/stores/:slug/history', requireUser, async (req, res) => {
     where: { membershipId: membership.id },
     orderBy: { createdAt: 'desc' },
     take: 50,
-    select: { id: true, kind: true, delta: true, rewardName: true, createdAt: true },
+    select: { id: true, kind: true, delta: true, rewardName: true, note: true, createdAt: true },
   });
   res.json({ events });
 });

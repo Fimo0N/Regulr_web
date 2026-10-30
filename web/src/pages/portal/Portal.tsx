@@ -4,14 +4,16 @@ import { api, type OwnerStore } from '../../api';
 import { useSession } from '../../session';
 import { SignIn } from '../../components/SignIn';
 import { CreateStore } from './CreateStore';
-import { ActivityTab } from './ActivityTab';
+import { CustomersTab } from './CustomersTab';
+import { DashboardTab } from './DashboardTab';
 import { DesignTab } from './DesignTab';
 import { ProfileTab } from './ProfileTab';
 import { RewardsTab } from './RewardsTab';
 import { NfcTab } from './NfcTab';
 
 const TABS = [
-  { id: 'activity', label: 'Activity' },
+  { id: 'dashboard', label: 'Dashboard' },
+  { id: 'customers', label: 'Customers' },
   { id: 'design', label: 'Card design' },
   { id: 'profile', label: 'Store profile' },
   { id: 'rewards', label: 'Rewards' },
@@ -25,7 +27,7 @@ export function Portal() {
   const [stores, setStores] = useState<OwnerStore[] | null>(null);
   const [creating, setCreating] = useState(false);
 
-  const tab = (TABS.some((t) => t.id === params.get('tab')) ? params.get('tab') : 'activity') as TabId;
+  const tab = (TABS.some((t) => t.id === params.get('tab')) ? params.get('tab') : 'dashboard') as TabId;
   const storeId = params.get('store');
   const store = stores?.find((s) => s.id === storeId) ?? stores?.[0] ?? null;
 
@@ -108,7 +110,8 @@ export function Portal() {
               ))}
             </nav>
 
-            {tab === 'activity' && <ActivityTab key={store.id} store={store} />}
+            {tab === 'dashboard' && <DashboardTab key={store.id} store={store} />}
+            {tab === 'customers' && <CustomersTab key={store.id} store={store} />}
             {tab === 'design' && <DesignTab key={store.id} store={store} onUpdated={onStoreUpdated} />}
             {tab === 'profile' && <ProfileTab key={store.id} store={store} onUpdated={onStoreUpdated} />}
             {tab === 'rewards' && <RewardsTab key={store.id} store={store} />}

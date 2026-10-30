@@ -113,3 +113,20 @@ export async function redeem(userId: string, storeId: string, rewardId: string, 
   syncBalance(result.membership.id, { kind: 'redeem', rewardName: reward.name, cost: reward.cost });
   return { ...result, reward };
 }
+
+/** The shop adds or removes stamps by hand, e.g. a forgotten tap or a mistake. Never goes below zero. */
+export async function adjustStamps(storeId: string, membershipId: string, delta: number, note: string | null) {
+  const membership = await prisma.$transaction(async (tx) => {
+    const current = await tx.membership.findUnique({ where: { id: membershipId } });
+    if (!current || current.storeId !== storeId) throw new HttpError(404, 'customer_not_found');
+    const changed = await tx.membership.updateMany({
+      where: { id: membershipId, balance: { gte: -delta } },
+      data: { balance: { increment: delta }, ...(delta > 0 && { lifetimeStamps: { increment: delta } }) },
+    });
+    if (changed.count === 0) throw new HttpError(400, 'balance_below_zero');
+    await tx.stampEvent.create({ data: { storeId, membershipId, kind: 'adjust', delta, note } });
+    return tx.membership.findUniqueOrThrow({ where: { id: membershipId } });
+  });
+  syncBalance(membership.id, { kind: 'adjust', added: delta, note });
+  return membership;
+}

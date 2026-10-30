@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import express, { Router, type Response } from 'express';
+import express, { Router } from 'express';
 import QRCode from 'qrcode';
 import { z } from 'zod';
 import { config } from '../config.js';
@@ -11,17 +11,15 @@ import { hoursSchema, ownerStore } from '../stores.js';
 import { saveUpload } from '../uploads.js';
 import { REWARD_ICONS } from '../../shared/stampArt.js';
 import { syncStoreCard } from '../wallet/index.js';
+import { insightsRouter } from './insights.js';
+import { ownedStore } from './owned.js';
 
 export const portalRouter = Router();
 portalRouter.use(requireUser);
+// Dashboard stats and the customer list.
+portalRouter.use(insightsRouter);
 
 const hexColor = z.string().regex(/^#[0-9a-fA-F]{6}$/);
-
-async function ownedStore(res: Response, storeId: string) {
-  const store = await prisma.store.findUnique({ where: { id: storeId } });
-  if (!store || store.ownerId !== currentUser(res).id) throw new HttpError(404, 'store_not_found');
-  return store;
-}
 
 function tagUrl(slug: string, tag: { id: string; mode: string; secret: string | null }) {
   return tag.mode === 'static'
