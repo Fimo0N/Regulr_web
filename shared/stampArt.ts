@@ -41,6 +41,8 @@ export function progressCaption(p: StampProgress | null) {
 // Google Wallet's recommended hero image size.
 export const ART_WIDTH = 1032;
 export const ART_HEIGHT = 336;
+/** Taller Wallet picture used when the shop has a cover photo, so more of the photo shows. */
+export const TALL_ART_HEIGHT = 560;
 /** Rewards shown on the ladder at once; longer menus show the stretch around the customer. */
 export const LADDER_SIZE = 5;
 
@@ -144,6 +146,8 @@ type ArtOptions = {
   photo?: string | null;
   /** Animate the "you are here" marker (web card, after a stamp). */
   pop?: boolean;
+  /** Picture height (the width is always ART_WIDTH). Taller pictures put the ladder at the bottom. */
+  height?: number;
 };
 
 /** The rewards on the ladder and the stamp count where it starts. */
@@ -160,10 +164,21 @@ export function stampArtSvg(o: ArtOptions) {
   const bg = safeColor(o.bg, '#1f2937');
   const fg = safeColor(o.fg, '#ffffff');
   const W = ART_WIDTH;
-  const H = ART_HEIGHT;
+  const H = o.height ?? ART_HEIGHT;
+  const tall = H > ART_HEIGHT;
   const out: string[] = [rect(0, 0, W, H, bg)];
 
-  if (o.photo) {
+  if (o.photo && tall) {
+    // Photo on top, fading into the card colour where the ladder sits.
+    const fade = `fade-${bg.slice(1)}`;
+    out.push(
+      `<defs><linearGradient id="${fade}" x1="0" y1="0" x2="0" y2="1">` +
+        `<stop offset="0" stop-color="${bg}" stop-opacity="0"/><stop offset="0.45" stop-color="${bg}" stop-opacity="0.15"/>` +
+        `<stop offset="0.8" stop-color="${bg}" stop-opacity="0.85"/><stop offset="1" stop-color="${bg}" stop-opacity="0.95"/></linearGradient></defs>`,
+      `<image href="${escapeAttr(o.photo)}" x="0" y="0" width="${W}" height="${H}" preserveAspectRatio="xMidYMid slice"/>`,
+      `<rect width="${W}" height="${H}" fill="url(#${fade})"/>`,
+    );
+  } else if (o.photo) {
     out.push(
       `<image href="${escapeAttr(o.photo)}" x="0" y="0" width="${W}" height="${H}" preserveAspectRatio="xMidYMid slice"/>`,
       // Tint the photo with the card colour so the ladder stays readable on any picture.
@@ -175,7 +190,7 @@ export function stampArtSvg(o: ArtOptions) {
 
   const { shown, startValue } = ladderWindow(o.rewards, o.balance);
   if (shown.length) {
-    const cy = H / 2;
+    const cy = tall ? H - 110 : H / 2;
     const x0 = 78;
     const xEnd = W - 78;
     const R = 50;

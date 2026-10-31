@@ -8,6 +8,7 @@ import { stampProgress } from '../../shared/stampArt.js';
 import { liveRewardWhere } from '../rewards.js';
 import { absoluteLogoUrl } from '../stores.js';
 import { artUrl } from './art.js';
+import { cardUrl, passDetails, passLinks } from './passContent.js';
 import type { WalletProvider } from './types.js';
 
 const API = 'https://walletobjects.googleapis.com/walletobjects/v1';
@@ -43,13 +44,20 @@ export class GoogleWalletProvider implements WalletProvider {
     return `${this.cfg.issuerId}.member_${membership.id}`;
   }
 
-  /** Balance, next reward and the stamp picture: everything on the card that changes per visit. */
+  /**
+   * Everything on one customer's pass: balance, next reward, stamp picture, QR code and their
+   * card link. Sent in full on every update, so older passes pick up new fields too.
+   */
   private async progressFields(store: Store, membership: Membership) {
     const rewards = await prisma.reward.findMany({ where: { storeId: store.id, ...liveRewardWhere() }, select: { name: true, cost: true, icon: true } });
     const progress = stampProgress(rewards, membership.balance);
+    const number = memberNumber(membership.id);
     const fields: Record<string, unknown> = {
-      accountId: memberNumber(membership.id),
+      accountId: number,
       loyaltyPoints: { label: 'Stamps', balance: { int: membership.balance } },
+      // The QR is the shop's join link, so a friend can scan it off your phone to join too.
+      barcode: { type: 'QR_CODE', value: cardUrl(store), alternateText: `Member ${number}` },
+      linksModuleData: { uris: [{ id: 'card', uri: cardUrl(store), description: 'Open my card: claim rewards, history, messages' }] },
     };
     if (!progress) return fields;
     fields.secondaryLoyaltyPoints =
@@ -92,6 +100,11 @@ export class GoogleWalletProvider implements WalletProvider {
       console.warn(`[google-wallet] store ${store.slug} needs a public https logo; skipping card sync`);
       return;
     }
+    const [rewards, promotions] = await Promise.all([
+      prisma.reward.findMany({ where: { storeId: store.id, ...liveRewardWhere() }, select: { name: true, cost: true, endsAt: true, perCustomerLimit: true } }),
+      prisma.promotion.findMany({ where: { storeId: store.id } }),
+    ]);
+    const links = passLinks(store);
     const body = {
       id: this.classId(store),
       issuerName: store.name,
@@ -100,6 +113,11 @@ export class GoogleWalletProvider implements WalletProvider {
       accountIdLabel: 'Member no.',
       programLogo: { sourceUri: { uri: logoUrl }, contentDescription: { defaultValue: { language: 'en-US', value: store.name } } },
       hexBackgroundColor: store.bgColor,
+      // Back of the pass: reward menu, happy hours, opening hours, how it works.
+      textModulesData: passDetails(store, rewards, promotions),
+      ...(links.length && { linksModuleData: { uris: links } }),
+      // Google shows the pass on the customer's phone when they're near the shop.
+      ...(store.latitude !== null && store.longitude !== null && { merchantLocations: [{ latitude: store.latitude, longitude: store.longitude }] }),
       reviewStatus: 'UNDER_REVIEW',
     };
     const inserted = await this.call('POST', '/loyaltyClass', body);
@@ -120,9 +138,6 @@ export class GoogleWalletProvider implements WalletProvider {
       state: 'ACTIVE',
       accountName: user.name || user.email,
       ...(await this.progressFields(store, membership)),
-      linksModuleData: {
-        uris: [{ id: 'menu', uri: `${config.publicUrl}/s/${store.slug}`, description: 'Open reward menu' }],
-      },
     };
     const inserted = await this.writeObject('POST', '/loyaltyObject', object);
     if (inserted.status === 409) {

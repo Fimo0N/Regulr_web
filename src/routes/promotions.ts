@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { toMinutes } from '../../shared/promotions.js';
 import { prisma } from '../db.js';
 import { HttpError } from '../errors.js';
+import { syncStoreCard } from '../wallet/index.js';
 import { ownedStore } from './owned.js';
 
 // Happy hours (mounted under /api/portal, owners only).
@@ -48,6 +49,7 @@ promotionsRouter.post('/stores/:id/promotions', async (req, res) => {
   const promotion = await prisma.promotion.create({
     data: { ...validated(input), name: input.name, multiplier: input.multiplier, startTime: input.startTime, endTime: input.endTime, days: [...new Set(input.days)].sort().join(''), storeId: store.id },
   });
+  syncStoreCard(store); // the pass lists happy hours
   res.status(201).json({ promotion });
 });
 
@@ -56,6 +58,7 @@ promotionsRouter.patch('/stores/:id/promotions/:promotionId', async (req, res) =
   const current = await prisma.promotion.findFirst({ where: { id: String(req.params.promotionId), storeId: store.id } });
   if (!current) throw new HttpError(404, 'promotion_not_found');
   const promotion = await prisma.promotion.update({ where: { id: current.id }, data: validated(promotionInput.parse(req.body), current) });
+  syncStoreCard(store);
   res.json({ promotion });
 });
 
@@ -63,5 +66,6 @@ promotionsRouter.delete('/stores/:id/promotions/:promotionId', async (req, res) 
   const store = await ownedStore(res, String(req.params.id));
   const deleted = await prisma.promotion.deleteMany({ where: { id: String(req.params.promotionId), storeId: store.id } });
   if (deleted.count === 0) throw new HttpError(404, 'promotion_not_found');
+  syncStoreCard(store);
   res.json({ ok: true });
 });

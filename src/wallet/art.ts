@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import type { Store } from '@prisma/client';
 import { Resvg } from '@resvg/resvg-js';
 import { Router } from 'express';
-import { stampArtSvg } from '../../shared/stampArt.js';
+import { stampArtSvg, TALL_ART_HEIGHT } from '../../shared/stampArt.js';
 import { config } from '../config.js';
 import { prisma } from '../db.js';
 import { liveRewardWhere } from '../rewards.js';
@@ -16,7 +16,8 @@ import { readUpload } from '../uploads.js';
 type ArtReward = { cost: number; icon: string };
 
 function designHash(store: Pick<Store, 'coverUrl' | 'bgColor' | 'textColor'>, rewards: ArtReward[]) {
-  const key = JSON.stringify([store.coverUrl, store.bgColor, store.textColor, rewards.map((r) => [r.cost, r.icon])]);
+  // "v2": the taller pass picture. Bump it whenever the drawing changes, so Google fetches it again.
+  const key = JSON.stringify(['v2', store.coverUrl, store.bgColor, store.textColor, rewards.map((r) => [r.cost, r.icon])]);
   return createHash('sha1').update(key).digest('hex').slice(0, 10);
 }
 
@@ -49,7 +50,8 @@ artRouter.get('/wallet-art/:storeId/:file', async (req, res) => {
   const key = `${store.id}/${balance}-${designHash(store, rewards)}`;
   let png = cache.get(key);
   if (!png) {
-    const svg = stampArtSvg({ bg: store.bgColor, fg: store.textColor, balance, rewards, photo: await coverDataUri(store.coverUrl) });
+    const photo = await coverDataUri(store.coverUrl);
+    const svg = stampArtSvg({ bg: store.bgColor, fg: store.textColor, balance, rewards, photo, height: photo ? TALL_ART_HEIGHT : undefined });
     png = new Resvg(svg, { font: { loadSystemFonts: false } }).render().asPng();
     if (cache.size >= CACHE_SIZE) cache.delete(cache.keys().next().value!);
     cache.set(key, png);

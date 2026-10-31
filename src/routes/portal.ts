@@ -172,6 +172,7 @@ portalRouter.patch('/stores/:id/rewards/:rewardId', async (req, res) => {
     data: rewardData(rewardInput.partial().parse(req.body), store.timezone),
   });
   if (updated.count === 0) throw new HttpError(404, 'reward_not_found');
+  syncStoreCard(store);
   res.json({ ok: true });
 });
 
